@@ -1,0 +1,715 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CCS_HOME="${HOME}/.config/ccs"
+CCS_PROFILES_DIR="${CCS_HOME}/profiles"
+CCS_CONFIG_FILE="${CCS_HOME}/config"
+CCS_HELPER_PATH="${CCS_HOME}/ccs.sh"
+CCS_INSTALL_BIN_DIR="${HOME}/.local/bin"
+CCS_INSTALL_BIN_PATH="${CCS_INSTALL_BIN_DIR}/ccs"
+
+HOOK_START="# >>> ccs shell hook >>>"
+HOOK_END="# <<< ccs shell hook <<<"
+HOOK_BODY='if [ -f "$HOME/.config/ccs/ccs.sh" ]; then
+  . "$HOME/.config/ccs/ccs.sh"
+fi'
+
+KNOWN_ENV_VARS=(
+  "CLAUDE_CONFIG_DIR"
+  "CCS_SHARED_CLAUDE_DIR"
+  "CCS_SHARED_PATHS"
+  "ANTHROPIC_API_KEY"
+  "ANTHROPIC_AUTH_TOKEN"
+  "ANTHROPIC_BASE_URL"
+  "ANTHROPIC_MODEL"
+  "ANTHROPIC_DEFAULT_OPUS_MODEL"
+  "ANTHROPIC_DEFAULT_SONNET_MODEL"
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+  "ENABLE_TOOL_SEARCH"
+  "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"
+  "CCS_ACTIVE_PROFILE"
+)
+
+PROFILE_KEYS=()
+PROFILE_VALUES=()
+DEFAULT_SHARED_PATHS="CLAUDE.md,settings.json,skills,plugins,rules"
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+read_answer() {
+  local answer=""
+  if ! IFS= read -r answer; then
+    answer=""
+  fi
+  printf '%s' "${answer}"
+}
+
+print_help() {
+  cat <<'EOF'
+Usage:
+  ccs use <profile> [--global|--run]
+  ccs run [profile|-p profile] [-- <claude args...>]
+  ccs status
+  ccs init
+  ccs profile edit <profile>
+EOF
+}
+
+is_supported_profile() {
+  case "${1:-}" in
+    max|api|glm)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+profile_file() {
+  printf '%s/%s.env\n' "${CCS_PROFILES_DIR}" "$1"
+}
+
+read_key_from_file() {
+  local file_path="$1"
+  local expected_key="$2"
+  local line
+  local key
+  local value
+
+  [[ -f "${file_path}" ]] || return 1
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" == \#* ]] && continue
+    [[ "${line}" == *=* ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    if [[ "${key}" == "${expected_key}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done <"${file_path}"
+
+  return 1
+}
+
+load_profile() {
+  local profile="$1"
+  local profile_file_path
+  local line
+  local key
+  local value
+
+  profile_file_path="$(profile_file "${profile}")"
+  [[ -f "${profile_file_path}" ]] || die "Profile '${profile}' is not configured. Run 'ccs init' or 'ccs profile edit ${profile}'."
+
+  PROFILE_KEYS=()
+  PROFILE_VALUES=()
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" == \#* ]] && continue
+    [[ "${line}" == *=* ]] || die "Profile '${profile}' contains an invalid line: ${line}"
+    key="${line%%=*}"
+    value="${line#*=}"
+    PROFILE_KEYS+=("${key}")
+    PROFILE_VALUES+=("${value}")
+  done <"${profile_file_path}"
+
+  validate_profile "${profile}"
+}
+
+profile_has_key() {
+  local expected="$1"
+  local index
+  for index in "${!PROFILE_KEYS[@]}"; do
+    if [[ "${PROFILE_KEYS[${index}]}" == "${expected}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+profile_value() {
+  local expected="$1"
+  local index
+  for index in "${!PROFILE_KEYS[@]}"; do
+    if [[ "${PROFILE_KEYS[${index}]}" == "${expected}" ]]; then
+      printf '%s\n' "${PROFILE_VALUES[${index}]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+validate_profile() {
+  local profile="$1"
+
+  profile_has_key "CLAUDE_CONFIG_DIR" || die "Profile '${profile}' must define CLAUDE_CONFIG_DIR."
+
+  case "${profile}" in
+    api)
+      profile_has_key "ANTHROPIC_API_KEY" || die "Profile 'api' must define ANTHROPIC_API_KEY."
+      ;;
+    glm)
+      profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'glm' must define ANTHROPIC_BASE_URL."
+      profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'glm' must define ANTHROPIC_AUTH_TOKEN."
+      ;;
+  esac
+}
+
+emit_clear_envs() {
+  local var_name
+  for var_name in "${KNOWN_ENV_VARS[@]}"; do
+    printf 'unset %s\n' "${var_name}"
+  done
+}
+
+clear_envs() {
+  local var_name
+  for var_name in "${KNOWN_ENV_VARS[@]}"; do
+    unset "${var_name}" || true
+  done
+}
+
+emit_profile_exports() {
+  local index
+  local key
+  for index in "${!PROFILE_KEYS[@]}"; do
+    key="${PROFILE_KEYS[${index}]}"
+    [[ "${key}" == CCS_* ]] && continue
+    printf 'export %s=%q\n' "${key}" "${PROFILE_VALUES[${index}]}"
+  done
+}
+
+shared_base_dir() {
+  local value
+  value="$(profile_value "CCS_SHARED_CLAUDE_DIR" 2>/dev/null || true)"
+  if [[ -n "${value}" ]]; then
+    printf '%s\n' "${value}"
+  else
+    printf '%s\n' "${HOME}/.claude"
+  fi
+}
+
+shared_paths_value() {
+  local value
+  value="$(profile_value "CCS_SHARED_PATHS" 2>/dev/null || true)"
+  if [[ -n "${value}" ]]; then
+    printf '%s\n' "${value}"
+  else
+    printf '%s\n' "${DEFAULT_SHARED_PATHS}"
+  fi
+}
+
+backup_conflicting_path() {
+  local config_dir="$1"
+  local path_name="$2"
+  local target_path="$3"
+  local backup_root="${config_dir}/.ccs-local-backup"
+  local backup_path="${backup_root}/${path_name}"
+  local suffix=1
+
+  mkdir -p "$(dirname "${backup_path}")"
+
+  while [[ -e "${backup_path}" || -L "${backup_path}" ]]; do
+    backup_path="${backup_root}/${path_name}.bak.${suffix}"
+    suffix=$((suffix + 1))
+    mkdir -p "$(dirname "${backup_path}")"
+  done
+
+  mv "${target_path}" "${backup_path}"
+  printf 'Migrated local %s to %s\n' "${path_name}" "${backup_path}" >&2
+}
+
+ensure_shared_paths() {
+  local config_dir
+  local shared_dir
+  local shared_paths
+  local path_name
+  local source_path
+  local target_path
+  local current_target
+  local old_ifs
+
+  config_dir="$(profile_value "CLAUDE_CONFIG_DIR")"
+  shared_dir="$(shared_base_dir)"
+  shared_paths="$(shared_paths_value)"
+
+  mkdir -p "${config_dir}"
+
+  [[ -n "${shared_dir}" ]] || return 0
+  [[ -d "${shared_dir}" ]] || return 0
+
+  old_ifs="${IFS}"
+  IFS=','
+  # shellcheck disable=SC2086
+  set -- ${shared_paths}
+  IFS="${old_ifs}"
+
+  for path_name in "$@"; do
+    path_name="${path_name#"${path_name%%[![:space:]]*}"}"
+    path_name="${path_name%"${path_name##*[![:space:]]}"}"
+    [[ -n "${path_name}" ]] || continue
+
+    source_path="${shared_dir}/${path_name}"
+    target_path="${config_dir}/${path_name}"
+
+    [[ -e "${source_path}" || -L "${source_path}" ]] || continue
+
+    if [[ -L "${target_path}" ]]; then
+      current_target="$(readlink "${target_path}")"
+      if [[ "${current_target}" == "${source_path}" ]]; then
+        continue
+      fi
+      backup_conflicting_path "${config_dir}" "${path_name}" "${target_path}"
+    fi
+
+    if [[ -e "${target_path}" ]]; then
+      backup_conflicting_path "${config_dir}" "${path_name}" "${target_path}"
+    fi
+
+    mkdir -p "$(dirname "${target_path}")"
+    ln -s "${source_path}" "${target_path}"
+  done
+}
+
+emit_profile_activation() {
+  local profile="$1"
+  load_profile "${profile}"
+  ensure_shared_paths
+  emit_clear_envs
+  emit_profile_exports
+  printf 'export CCS_ACTIVE_PROFILE=%q\n' "${profile}"
+}
+
+apply_profile_env() {
+  local profile="$1"
+  local index
+
+  load_profile "${profile}"
+  ensure_shared_paths
+  clear_envs
+
+  for index in "${!PROFILE_KEYS[@]}"; do
+    if [[ "${PROFILE_KEYS[${index}]}" != CCS_* ]]; then
+      export "${PROFILE_KEYS[${index}]}=${PROFILE_VALUES[${index}]}"
+    fi
+  done
+  export "CCS_ACTIVE_PROFILE=${profile}"
+}
+
+get_default_profile() {
+  read_key_from_file "${CCS_CONFIG_FILE}" "default_profile"
+}
+
+set_default_profile() {
+  local profile="$1"
+  mkdir -p "${CCS_HOME}"
+  printf 'default_profile=%s\n' "${profile}" >"${CCS_CONFIG_FILE}"
+}
+
+resolve_run_profile() {
+  local explicit_profile="${1:-}"
+
+  if [[ -n "${explicit_profile}" ]]; then
+    printf '%s\n' "${explicit_profile}"
+    return 0
+  fi
+
+  if [[ -n "${CCS_ACTIVE_PROFILE:-}" ]]; then
+    printf '%s\n' "${CCS_ACTIVE_PROFILE}"
+    return 0
+  fi
+
+  get_default_profile
+}
+
+print_status() {
+  local session_profile="${CCS_ACTIVE_PROFILE:-none}"
+  local global_profile="none"
+  local profile
+  local claude_config_dir
+  local profile_path
+  local shared_dir
+  local shared_paths
+
+  if global_profile="$(get_default_profile 2>/dev/null)"; then
+    :
+  else
+    global_profile="none"
+  fi
+
+  printf 'Session profile: %s\n' "${session_profile}"
+  printf 'Global profile: %s\n' "${global_profile}"
+  printf 'Configured profiles:\n'
+
+  for profile in max api glm; do
+    if [[ -f "$(profile_file "${profile}")" ]]; then
+      profile_path="$(profile_file "${profile}")"
+      load_profile "${profile}"
+      claude_config_dir="$(profile_value "CLAUDE_CONFIG_DIR" 2>/dev/null || true)"
+      shared_dir="$(shared_base_dir)"
+      shared_paths="$(shared_paths_value)"
+      printf '%s -> %s (%s)\n' "${profile}" "${claude_config_dir:-missing CLAUDE_CONFIG_DIR}" "${profile_path}"
+      if [[ -n "${shared_dir}" ]]; then
+        printf '  shared from: %s\n' "${shared_dir}"
+        printf '  shared paths: %s\n' "${shared_paths}"
+      fi
+    fi
+  done
+}
+
+default_claude_config_dir() {
+  printf '%s/claude/%s\n' "${CCS_HOME}" "$1"
+}
+
+write_profile_file() {
+  local profile="$1"
+  shift
+  local file_path
+
+  mkdir -p "${CCS_PROFILES_DIR}"
+  file_path="$(profile_file "${profile}")"
+  printf '%s\n' "$@" >"${file_path}"
+  chmod 600 "${file_path}"
+}
+
+ensure_profile_stub() {
+  local profile="$1"
+  local default_dir
+  local file_path
+
+  file_path="$(profile_file "${profile}")"
+  [[ -f "${file_path}" ]] && return 0
+
+  default_dir="$(default_claude_config_dir "${profile}")"
+
+  case "${profile}" in
+    max)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}"
+      ;;
+    api)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "# ANTHROPIC_API_KEY=" \
+        "# ANTHROPIC_DEFAULT_OPUS_MODEL=" \
+        "# ANTHROPIC_DEFAULT_SONNET_MODEL=" \
+        "# ANTHROPIC_DEFAULT_HAIKU_MODEL="
+      ;;
+    glm)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic" \
+        "# ANTHROPIC_AUTH_TOKEN=" \
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1" \
+        "# ANTHROPIC_DEFAULT_SONNET_MODEL=glm-4.7" \
+        "# ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air" \
+        "# ENABLE_TOOL_SEARCH=true" \
+        "# CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1"
+      ;;
+  esac
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default_answer="${2:-n}"
+  local answer
+
+  printf '%s' "${prompt}" >&2
+  answer="$(read_answer)"
+  answer="${answer:-${default_answer}}"
+
+  case "${answer}" in
+    y|Y|yes|YES)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+prompt_with_default() {
+  local prompt="$1"
+  local default_value="$2"
+  local answer
+
+  printf '%s' "${prompt}" >&2
+  answer="$(read_answer)"
+  printf '%s\n' "${answer:-${default_value}}"
+}
+
+write_helper_script() {
+  mkdir -p "${CCS_HOME}"
+  cat >"${CCS_HELPER_PATH}" <<'EOF'
+#!/usr/bin/env bash
+ccs_apply_global_profile() {
+  local ccs_bin="$HOME/.local/bin/ccs"
+  if [[ -x "${ccs_bin}" ]]; then
+    eval "$("${ccs_bin}" internal global-env 2>/dev/null || true)"
+  fi
+}
+
+ccs_apply_global_profile
+EOF
+  chmod +x "${CCS_HELPER_PATH}"
+}
+
+ensure_hook_in_file() {
+  local rc_file="$1"
+
+  touch "${rc_file}"
+
+  if grep -Fq "${HOOK_START}" "${rc_file}"; then
+    return 0
+  fi
+
+  cat >>"${rc_file}" <<EOF
+${HOOK_START}
+${HOOK_BODY}
+${HOOK_END}
+EOF
+}
+
+bash_profile_sources_bashrc() {
+  local bash_profile="${HOME}/.bash_profile"
+  [[ -f "${bash_profile}" ]] || return 1
+  grep -Eq '\.bashrc|source[[:space:]]+.*\.bashrc' "${bash_profile}"
+}
+
+internal_install_hooks() {
+  write_helper_script
+  ensure_hook_in_file "${HOME}/.zshrc"
+  ensure_hook_in_file "${HOME}/.bashrc"
+
+  if [[ -f "${HOME}/.bash_profile" ]] && ! bash_profile_sources_bashrc; then
+    ensure_hook_in_file "${HOME}/.bash_profile"
+  fi
+
+  printf 'Installed shell hooks.\n'
+}
+
+create_profile_interactively() {
+  local profile="$1"
+  local default_dir
+  local config_dir
+  local api_key
+  local base_url
+  local auth_token
+  local opus_model
+
+  default_dir="$(default_claude_config_dir "${profile}")"
+  config_dir="$(prompt_with_default "CLAUDE_CONFIG_DIR for ${profile} [${default_dir}]: " "${default_dir}")"
+
+  case "${profile}" in
+    max)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${config_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}"
+      ;;
+    api)
+      api_key="$(prompt_with_default "ANTHROPIC_API_KEY: " "")"
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${config_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_API_KEY=${api_key}"
+      ;;
+    glm)
+      base_url="$(prompt_with_default "ANTHROPIC_BASE_URL [https://api.z.ai/api/anthropic]: " "https://api.z.ai/api/anthropic")"
+      auth_token="$(prompt_with_default "ANTHROPIC_AUTH_TOKEN: " "")"
+      opus_model="$(prompt_with_default "ANTHROPIC_DEFAULT_OPUS_MODEL [glm-5.1]: " "glm-5.1")"
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${config_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_BASE_URL=${base_url}" \
+        "ANTHROPIC_AUTH_TOKEN=${auth_token}" \
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=${opus_model}"
+      ;;
+  esac
+
+  mkdir -p "${config_dir}"
+}
+
+run_installer_if_available() {
+  "$0" internal install-hooks
+}
+
+print_init_next_steps() {
+  cat <<'EOF'
+Profiles configured.
+To activate in the current shell: eval "$(ccs use <profile>)"
+To set the default for new shells: ccs use <profile> --global
+To edit profile files manually: ~/.config/ccs/profiles/<profile>.env
+EOF
+}
+
+cmd_init() {
+  if prompt_yes_no "Configure max profile? [y/N]: " "n"; then
+    create_profile_interactively "max"
+  fi
+
+  if prompt_yes_no "Configure api profile? [y/N]: " "n"; then
+    create_profile_interactively "api"
+  fi
+
+  if prompt_yes_no "Configure glm profile? [y/N]: " "n"; then
+    create_profile_interactively "glm"
+  fi
+
+  if prompt_yes_no "Install shell hooks now? [y/N]: " "n"; then
+    run_installer_if_available
+  fi
+
+  print_init_next_steps
+}
+
+cmd_use() {
+  local profile="${1:-}"
+  local flag
+  local global_mode=0
+  local run_mode=0
+  shift || true
+
+  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm."
+
+  for flag in "$@"; do
+    case "${flag}" in
+      --global)
+        global_mode=1
+        ;;
+      --run)
+        run_mode=1
+        ;;
+      *)
+        die "Unknown flag '${flag}' for 'ccs use'."
+        ;;
+    esac
+  done
+
+  if (( run_mode == 1 )); then
+    cmd_run "${profile}"
+    return 0
+  fi
+
+  load_profile "${profile}"
+
+  if (( global_mode == 1 )); then
+    set_default_profile "${profile}"
+    printf 'Global profile set to %s\n' "${profile}"
+    return 0
+  fi
+
+  emit_profile_activation "${profile}"
+}
+
+cmd_run() {
+  local profile=""
+
+  if [[ "${1:-}" == "-p" ]]; then
+    shift
+    [[ $# -gt 0 ]] || die "Missing profile after -p."
+    profile="${1}"
+    shift
+  elif is_supported_profile "${1:-}"; then
+    profile="${1}"
+    shift
+  fi
+
+  profile="$(resolve_run_profile "${profile}" || true)"
+  [[ -n "${profile}" ]] || die "No profile selected. Run 'ccs run <profile>' or set a global default with 'ccs use <profile> --global'."
+
+  if [[ "${1:-}" == "--" ]]; then
+    shift
+  fi
+
+  apply_profile_env "${profile}"
+  exec claude "$@"
+}
+
+cmd_profile() {
+  local subcommand="${1:-}"
+  local profile="${2:-}"
+
+  case "${subcommand}" in
+    edit)
+      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm."
+      [[ -n "${EDITOR:-}" ]] || die "EDITOR is required for 'ccs profile edit'."
+      ensure_profile_stub "${profile}"
+      "${EDITOR}" "$(profile_file "${profile}")"
+      ;;
+    *)
+      die "Unknown profile subcommand '${subcommand}'."
+      ;;
+  esac
+}
+
+cmd_internal() {
+  local action="${1:-}"
+  local default_profile
+
+  case "${action}" in
+    global-env)
+      default_profile="$(get_default_profile 2>/dev/null || true)"
+      if [[ -n "${default_profile}" ]] && is_supported_profile "${default_profile}" && [[ -f "$(profile_file "${default_profile}")" ]]; then
+        emit_profile_activation "${default_profile}"
+      fi
+      ;;
+    install-hooks)
+      internal_install_hooks
+      ;;
+    *)
+      die "Unknown internal command '${action}'."
+      ;;
+  esac
+}
+
+main() {
+  local command="${1:-help}"
+  shift || true
+
+  case "${command}" in
+    help|-h|--help)
+      print_help
+      ;;
+    use)
+      cmd_use "$@"
+      ;;
+    run)
+      cmd_run "$@"
+      ;;
+    status)
+      print_status
+      ;;
+    init)
+      cmd_init
+      ;;
+    profile)
+      cmd_profile "$@"
+      ;;
+    internal)
+      cmd_internal "$@"
+      ;;
+    *)
+      print_help
+      ;;
+  esac
+}
+
+main "$@"
