@@ -1,10 +1,11 @@
 # ccs
 
-`ccs` is a small Bash tool for switching Claude Code between three modes:
+`ccs` is a small Bash tool for switching Claude Code between four modes:
 
 - `max`: Claude subscription login
 - `api`: Anthropic API key
 - `glm`: Anthropic-compatible GLM endpoint
+- `mimo`: Xiaomi MiMo (mimo-v2.5 / mimo-v2.5-pro) via Anthropic-compatible endpoint
 
 It supports:
 
@@ -47,6 +48,7 @@ Activate a profile in the current shell:
 eval "$(ccs use max)"
 eval "$(ccs use api)"
 eval "$(ccs use glm)"
+eval "$(ccs use mimo)"
 ```
 
 Set the global default for new shells:
@@ -55,6 +57,7 @@ Set the global default for new shells:
 ccs use max --global
 ccs use api --global
 ccs use glm --global
+ccs use mimo --global
 ```
 
 Run Claude once under a profile without changing the current shell:
@@ -91,6 +94,7 @@ Examples:
 - `~/.config/ccs/profiles/max.env`
 - `~/.config/ccs/profiles/api.env`
 - `~/.config/ccs/profiles/glm.env`
+- `~/.config/ccs/profiles/mimo.env`
 
 Each profile must define its own `CLAUDE_CONFIG_DIR`.
 
@@ -124,6 +128,31 @@ CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/max
 CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
 CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
 ```
+
+Typical `mimo.env`:
+
+```dotenv
+CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/mimo
+CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
+CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
+ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic
+ANTHROPIC_AUTH_TOKEN=sk-your-mimo-key
+ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro
+ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
+ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
+```
+
+For Xiaomi MiMo Token Plan subscribers, the BASE_URL is region-specific (the
+console assigns an exclusive URL per subscription, e.g.
+`https://token-plan-sgp.xiaomimimo.com/anthropic` for Singapore or
+`https://token-plan-cn.xiaomimimo.com/anthropic` for China), and the key is
+`tp-xxx`.
+
+The first time you run `eval "$(ccs use mimo)"` or `ccs run mimo` without a
+profile file, ccs prompts for your API Key. If it starts with `sk-`, ccs uses
+the pay-as-you-go BASE_URL automatically. If it starts with `tp-`, ccs prompts
+once for your Token Plan BASE_URL (defaulting to the Singapore region). The
+file is saved and subsequent runs load it silently.
 
 ## Shared vs Isolated Data
 

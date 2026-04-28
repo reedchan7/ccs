@@ -264,7 +264,7 @@ test_installed_ccs_init_can_install_hooks() {
   rm -f "${TEST_HOME}/.config/ccs/ccs.sh" "${TEST_HOME}/.zshrc" "${TEST_HOME}/.bashrc"
 
   TEST_OUTPUT="$(
-    printf 'n\nn\nn\ny\n' | \
+    printf 'n\nn\nn\nn\ny\n' | \
       HOME="${TEST_HOME}" \
       PATH="${TEST_BIN}:${TEST_HOME}/.local/bin:${ORIG_PATH}" \
       "${TEST_HOME}/.local/bin/ccs" init 2>&1
@@ -351,6 +351,111 @@ test_existing_local_shared_paths_are_backed_up_and_relinked() {
   assert_file_contains "${TEST_HOME}/.config/ccs/claude/glm/.ccs-local-backup/plugins/local.txt" "local plugin"
 }
 
+test_run_uses_mimo_profile() {
+  write_profile "mimo" \
+    "CLAUDE_CONFIG_DIR=${TEST_HOME}/.config/ccs/claude/mimo" \
+    "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic" \
+    "ANTHROPIC_AUTH_TOKEN=sk-mimo-test" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5"
+
+  run_ccs run mimo -- --print mimo
+
+  assert_status 0
+  assert_output_contains "CCS_ACTIVE_PROFILE=mimo"
+  assert_output_contains "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic"
+  assert_output_contains "ANTHROPIC_AUTH_TOKEN=sk-mimo-test"
+  assert_output_contains "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro"
+  assert_output_contains "ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5"
+  assert_output_contains "ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5"
+}
+
+test_use_mimo_auto_prompts_for_api_key_when_unconfigured() {
+  TEST_OUTPUT="$(
+    printf 'sk-mimo-auto\n' | \
+      HOME="${TEST_HOME}" \
+      PATH="${TEST_BIN}:${ORIG_PATH}" \
+      "${ROOT_DIR}/bin/ccs" use mimo 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_exists "${TEST_HOME}/.config/ccs/profiles/mimo.env"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_AUTH_TOKEN=sk-mimo-auto"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro"
+  assert_output_contains "export ANTHROPIC_AUTH_TOKEN=sk-mimo-auto"
+  assert_output_contains "export CCS_ACTIVE_PROFILE=mimo"
+}
+
+test_use_mimo_token_plan_defaults_to_sgp_when_blank() {
+  TEST_OUTPUT="$(
+    printf 'tp-plan-key\n\n' | \
+      HOME="${TEST_HOME}" \
+      PATH="${TEST_BIN}:${ORIG_PATH}" \
+      "${ROOT_DIR}/bin/ccs" use mimo 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_BASE_URL=https://token-plan-sgp.xiaomimimo.com/anthropic"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_AUTH_TOKEN=tp-plan-key"
+}
+
+test_use_mimo_token_plan_accepts_custom_base_url() {
+  TEST_OUTPUT="$(
+    printf 'tp-plan-key\nhttps://token-plan-cn.xiaomimimo.com/anthropic\n' | \
+      HOME="${TEST_HOME}" \
+      PATH="${TEST_BIN}:${ORIG_PATH}" \
+      "${ROOT_DIR}/bin/ccs" use mimo 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic"
+}
+
+test_use_mimo_does_not_reprompt_when_already_configured() {
+  write_profile "mimo" \
+    "CLAUDE_CONFIG_DIR=${TEST_HOME}/.config/ccs/claude/mimo" \
+    "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic" \
+    "ANTHROPIC_AUTH_TOKEN=sk-existing"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    "${ROOT_DIR}/bin/ccs" use mimo </dev/null 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_output_not_contains "is not configured"
+  assert_output_contains "export ANTHROPIC_AUTH_TOKEN=sk-existing"
+}
+
+test_mimo_profile_edit_creates_stub_with_xiaomi_base_url() {
+  cat >"${TEST_BIN}/fake-editor" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/fake-editor"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    EDITOR="${TEST_BIN}/fake-editor" \
+    "${ROOT_DIR}/bin/ccs" profile edit mimo 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_exists "${TEST_HOME}/.config/ccs/profiles/mimo.env"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/mimo.env" "ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5"
+}
+
 run_test() {
   local test_name="$1"
   local test_status=0
@@ -386,6 +491,12 @@ run_test test_manual_profile_extra_vars_are_applied
 run_test test_run_creates_default_shared_symlinks
 run_test test_run_uses_implicit_default_shared_config_for_existing_profiles
 run_test test_existing_local_shared_paths_are_backed_up_and_relinked
+run_test test_run_uses_mimo_profile
+run_test test_mimo_profile_edit_creates_stub_with_xiaomi_base_url
+run_test test_use_mimo_auto_prompts_for_api_key_when_unconfigured
+run_test test_use_mimo_token_plan_defaults_to_sgp_when_blank
+run_test test_use_mimo_token_plan_accepts_custom_base_url
+run_test test_use_mimo_does_not_reprompt_when_already_configured
 
 if (( failures > 0 )); then
   exit 1

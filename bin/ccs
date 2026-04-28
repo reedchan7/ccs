@@ -62,7 +62,7 @@ EOF
 
 is_supported_profile() {
   case "${1:-}" in
-    max|api|glm)
+    max|api|glm|mimo)
       return 0
       ;;
     *)
@@ -160,6 +160,10 @@ validate_profile() {
     glm)
       profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'glm' must define ANTHROPIC_BASE_URL."
       profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'glm' must define ANTHROPIC_AUTH_TOKEN."
+      ;;
+    mimo)
+      profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'mimo' must define ANTHROPIC_BASE_URL."
+      profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'mimo' must define ANTHROPIC_AUTH_TOKEN."
       ;;
   esac
 }
@@ -350,7 +354,7 @@ print_status() {
   printf 'Global profile: %s\n' "${global_profile}"
   printf 'Configured profiles:\n'
 
-  for profile in max api glm; do
+  for profile in max api glm mimo; do
     if [[ -f "$(profile_file "${profile}")" ]]; then
       profile_path="$(profile_file "${profile}")"
       load_profile "${profile}"
@@ -379,6 +383,36 @@ write_profile_file() {
   file_path="$(profile_file "${profile}")"
   printf '%s\n' "$@" >"${file_path}"
   chmod 600 "${file_path}"
+}
+
+mimo_base_url_for_token() {
+  local auth_token="$1"
+  case "${auth_token}" in
+    tp-*)
+      prompt_with_default \
+        "Token Plan BASE_URL [https://token-plan-sgp.xiaomimimo.com/anthropic]: " \
+        "https://token-plan-sgp.xiaomimimo.com/anthropic"
+      ;;
+    *)
+      printf '%s\n' "https://api.xiaomimimo.com/anthropic"
+      ;;
+  esac
+}
+
+write_mimo_profile_file() {
+  local config_dir="$1"
+  local auth_token="$2"
+  local base_url="$3"
+
+  write_profile_file "mimo" \
+    "CLAUDE_CONFIG_DIR=${config_dir}" \
+    "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+    "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+    "ANTHROPIC_BASE_URL=${base_url}" \
+    "ANTHROPIC_AUTH_TOKEN=${auth_token}" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5"
 }
 
 ensure_profile_stub() {
@@ -420,6 +454,46 @@ ensure_profile_stub() {
         "# ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air" \
         "# ENABLE_TOOL_SEARCH=true" \
         "# CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1"
+      ;;
+    mimo)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_BASE_URL=https://api.xiaomimimo.com/anthropic" \
+        "# ANTHROPIC_AUTH_TOKEN=" \
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro" \
+        "ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5" \
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5" \
+        "# ANTHROPIC_MODEL=mimo-v2.5-pro" \
+        "# Token Plan users: set ANTHROPIC_BASE_URL to the region URL from your subscription," \
+        "# e.g. https://token-plan-sgp.xiaomimimo.com/anthropic"
+      ;;
+  esac
+}
+
+auto_configure_profile_if_missing() {
+  local profile="$1"
+  local file_path
+  local auth_token
+  local default_dir
+  local base_url
+
+  file_path="$(profile_file "${profile}")"
+  [[ -f "${file_path}" ]] && return 0
+
+  case "${profile}" in
+    mimo)
+      default_dir="$(default_claude_config_dir "${profile}")"
+      printf 'Profile "mimo" is not configured yet. Setting it up now.\n' >&2
+      auth_token="$(prompt_with_default "Xiaomi MiMo API Key (sk-xxx or tp-xxx): " "")"
+      [[ -n "${auth_token}" ]] || die "API Key is required to configure mimo profile."
+
+      base_url="$(mimo_base_url_for_token "${auth_token}")"
+
+      write_mimo_profile_file "${default_dir}" "${auth_token}" "${base_url}"
+      mkdir -p "${default_dir}"
+      printf 'Saved mimo profile to %s\n' "${file_path}" >&2
       ;;
   esac
 }
@@ -542,6 +616,11 @@ create_profile_interactively() {
         "ANTHROPIC_AUTH_TOKEN=${auth_token}" \
         "ANTHROPIC_DEFAULT_OPUS_MODEL=${opus_model}"
       ;;
+    mimo)
+      auth_token="$(prompt_with_default "Xiaomi MiMo API Key (sk-xxx or tp-xxx): " "")"
+      base_url="$(mimo_base_url_for_token "${auth_token}")"
+      write_mimo_profile_file "${config_dir}" "${auth_token}" "${base_url}"
+      ;;
   esac
 
   mkdir -p "${config_dir}"
@@ -573,6 +652,10 @@ cmd_init() {
     create_profile_interactively "glm"
   fi
 
+  if prompt_yes_no "Configure mimo profile? [y/N]: " "n"; then
+    create_profile_interactively "mimo"
+  fi
+
   if prompt_yes_no "Install shell hooks now? [y/N]: " "n"; then
     run_installer_if_available
   fi
@@ -587,7 +670,7 @@ cmd_use() {
   local run_mode=0
   shift || true
 
-  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm."
+  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo."
 
   for flag in "$@"; do
     case "${flag}" in
@@ -608,6 +691,7 @@ cmd_use() {
     return 0
   fi
 
+  auto_configure_profile_if_missing "${profile}"
   load_profile "${profile}"
 
   if (( global_mode == 1 )); then
@@ -639,6 +723,7 @@ cmd_run() {
     shift
   fi
 
+  auto_configure_profile_if_missing "${profile}"
   apply_profile_env "${profile}"
   exec claude "$@"
 }
@@ -649,7 +734,7 @@ cmd_profile() {
 
   case "${subcommand}" in
     edit)
-      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm."
+      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo."
       [[ -n "${EDITOR:-}" ]] || die "EDITOR is required for 'ccs profile edit'."
       ensure_profile_stub "${profile}"
       "${EDITOR}" "$(profile_file "${profile}")"
