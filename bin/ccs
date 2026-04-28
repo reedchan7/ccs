@@ -56,6 +56,7 @@ Usage:
   ccs run [profile|-p profile] [-- <claude args...>]
   ccs status
   ccs init
+  ccs init bypass
   ccs profile edit <profile>
 EOF
 }
@@ -639,7 +640,34 @@ To edit profile files manually: ~/.config/ccs/profiles/<profile>.env
 EOF
 }
 
+cmd_init_bypass() {
+  local target_file=".claude/settings.local.json"
+  local existing="{}"
+
+  command -v python3 >/dev/null 2>&1 || die "'ccs init bypass' requires python3."
+
+  if [[ -f "${target_file}" ]]; then
+    existing="$(cat "${target_file}")"
+    [[ -n "${existing// /}" ]] || existing="{}"
+  fi
+
+  mkdir -p ".claude"
+  python3 -c "
+import json, sys
+data = json.loads(sys.argv[1])
+data.setdefault('permissions', {})['defaultMode'] = 'bypassPermissions'
+print(json.dumps(data, indent=2))
+" "${existing}" >"${target_file}"
+
+  printf 'Set permissions.defaultMode=bypassPermissions in %s\n' "${target_file}"
+}
+
 cmd_init() {
+  if [[ "${1:-}" == "bypass" ]]; then
+    cmd_init_bypass
+    return 0
+  fi
+
   if prompt_yes_no "Configure max profile? [y/N]: " "n"; then
     create_profile_interactively "max"
   fi
@@ -783,7 +811,7 @@ main() {
       print_status
       ;;
     init)
-      cmd_init
+      cmd_init "$@"
       ;;
     profile)
       cmd_profile "$@"

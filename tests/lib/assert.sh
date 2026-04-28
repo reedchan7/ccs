@@ -44,6 +44,18 @@ assert_file_contains() {
   fi
 }
 
+assert_file_not_contains() {
+  local file_path="$1"
+  local unexpected="$2"
+  if [[ ! -f "${file_path}" ]]; then
+    return 0
+  fi
+  if grep -Fq -- "${unexpected}" "${file_path}"; then
+    printf 'assert_file_not_contains failed: %s contains %s\n' "${file_path}" "${unexpected}" >&2
+    mark_assert_failure
+  fi
+}
+
 assert_file_exists() {
   local file_path="$1"
   if [[ ! -e "${file_path}" ]]; then

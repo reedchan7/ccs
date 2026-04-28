@@ -474,6 +474,58 @@ run_test() {
   printf 'PASS %s\n' "${test_name}"
 }
 
+test_init_bypass_creates_settings_local_json() {
+  local project_dir="${TEST_HOME}/project"
+  mkdir -p "${project_dir}"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    bash -c "cd '${project_dir}' && '${ROOT_DIR}/bin/ccs' init bypass" 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_exists "${project_dir}/.claude/settings.local.json"
+  assert_file_contains "${project_dir}/.claude/settings.local.json" '"defaultMode": "bypassPermissions"'
+  assert_output_contains "Set permissions.defaultMode=bypassPermissions"
+}
+
+test_init_bypass_merges_existing_json() {
+  local project_dir="${TEST_HOME}/project"
+  mkdir -p "${project_dir}/.claude"
+  printf '{"someOtherSetting": true}\n' >"${project_dir}/.claude/settings.local.json"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    bash -c "cd '${project_dir}' && '${ROOT_DIR}/bin/ccs' init bypass" 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_contains "${project_dir}/.claude/settings.local.json" '"defaultMode": "bypassPermissions"'
+  assert_file_contains "${project_dir}/.claude/settings.local.json" '"someOtherSetting": true'
+}
+
+test_init_bypass_overwrites_existing_default_mode() {
+  local project_dir="${TEST_HOME}/project"
+  mkdir -p "${project_dir}/.claude"
+  printf '{"permissions": {"defaultMode": "default", "allow": []}}\n' >"${project_dir}/.claude/settings.local.json"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    bash -c "cd '${project_dir}' && '${ROOT_DIR}/bin/ccs' init bypass" 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_contains "${project_dir}/.claude/settings.local.json" '"defaultMode": "bypassPermissions"'
+  assert_file_not_contains "${project_dir}/.claude/settings.local.json" '"defaultMode": "default"'
+  assert_file_contains "${project_dir}/.claude/settings.local.json" '"allow": []'
+}
+
 run_test test_help_shows_main_commands
 run_test test_use_emits_exports_for_api_profile
 run_test test_run_uses_explicit_profile_and_invokes_claude
@@ -497,6 +549,9 @@ run_test test_use_mimo_auto_prompts_for_api_key_when_unconfigured
 run_test test_use_mimo_token_plan_defaults_to_sgp_when_blank
 run_test test_use_mimo_token_plan_accepts_custom_base_url
 run_test test_use_mimo_does_not_reprompt_when_already_configured
+run_test test_init_bypass_creates_settings_local_json
+run_test test_init_bypass_merges_existing_json
+run_test test_init_bypass_overwrites_existing_default_mode
 
 if (( failures > 0 )); then
   exit 1
