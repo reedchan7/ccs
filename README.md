@@ -1,11 +1,12 @@
 # ccs
 
-`ccs` is a small Bash tool for switching Claude Code between four modes:
+`ccs` is a small Bash tool for switching Claude Code between five modes:
 
 - `max`: Claude subscription login
 - `api`: Anthropic API key
 - `glm`: Anthropic-compatible GLM endpoint
 - `mimo`: Xiaomi MiMo (mimo-v2.5 / mimo-v2.5-pro) via Anthropic-compatible endpoint
+- `deepseek`: DeepSeek V4 (deepseek-v4-pro / deepseek-v4-flash) via Anthropic-compatible endpoint
 
 It supports:
 
@@ -49,6 +50,7 @@ eval "$(ccs use max)"
 eval "$(ccs use api)"
 eval "$(ccs use glm)"
 eval "$(ccs use mimo)"
+eval "$(ccs use deepseek)"
 ```
 
 Set the global default for new shells:
@@ -58,6 +60,7 @@ ccs use max --global
 ccs use api --global
 ccs use glm --global
 ccs use mimo --global
+ccs use deepseek --global
 ```
 
 Run Claude once under a profile without changing the current shell:
@@ -67,6 +70,7 @@ ccs run max
 ccs run api -- --print "hello"
 ccs run glm
 ccs run -p glm
+ccs run deepseek
 ```
 
 Show current configuration:
@@ -95,6 +99,7 @@ Examples:
 - `~/.config/ccs/profiles/api.env`
 - `~/.config/ccs/profiles/glm.env`
 - `~/.config/ccs/profiles/mimo.env`
+- `~/.config/ccs/profiles/deepseek.env`
 
 Each profile must define its own `CLAUDE_CONFIG_DIR`.
 
@@ -141,6 +146,26 @@ ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5-pro
 ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
 ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
 ```
+
+Typical `deepseek.env`:
+
+```dotenv
+CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/deepseek
+CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
+CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+ANTHROPIC_AUTH_TOKEN=your-deepseek-api-key
+ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
+CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
+CLAUDE_CODE_EFFORT_LEVEL=max
+```
+
+Get your API key at https://platform.deepseek.com/api_keys.
+
+The first time you run `eval "$(ccs use deepseek)"` or `ccs run deepseek` without a
+profile file, ccs prompts for your API Key and saves the profile automatically.
 
 For Xiaomi MiMo Token Plan subscribers, the BASE_URL is region-specific (the
 console assigns an exclusive URL per subscription, e.g.

@@ -526,6 +526,89 @@ test_init_bypass_overwrites_existing_default_mode() {
   assert_file_contains "${project_dir}/.claude/settings.local.json" '"allow": []'
 }
 
+test_run_uses_deepseek_profile() {
+  write_profile "deepseek" \
+    "CLAUDE_CONFIG_DIR=${TEST_HOME}/.config/ccs/claude/deepseek" \
+    "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic" \
+    "ANTHROPIC_AUTH_TOKEN=sk-deepseek-test" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_EFFORT_LEVEL=max"
+
+  run_ccs run deepseek -- --print deepseek
+
+  assert_status 0
+  assert_output_contains "CCS_ACTIVE_PROFILE=deepseek"
+  assert_output_contains "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic"
+  assert_output_contains "ANTHROPIC_AUTH_TOKEN=sk-deepseek-test"
+  assert_output_contains "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro"
+  assert_output_contains "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash"
+}
+
+test_use_deepseek_auto_prompts_for_api_key_when_unconfigured() {
+  TEST_OUTPUT="$(
+    printf 'sk-deepseek-auto\n' | \
+      HOME="${TEST_HOME}" \
+      PATH="${TEST_BIN}:${ORIG_PATH}" \
+      "${ROOT_DIR}/bin/ccs" use deepseek 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_exists "${TEST_HOME}/.config/ccs/profiles/deepseek.env"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_AUTH_TOKEN=sk-deepseek-auto"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "CLAUDE_CODE_EFFORT_LEVEL=max"
+  assert_output_contains "export ANTHROPIC_AUTH_TOKEN=sk-deepseek-auto"
+  assert_output_contains "export CCS_ACTIVE_PROFILE=deepseek"
+}
+
+test_ds_alias_resolves_to_deepseek() {
+  write_profile "deepseek" \
+    "CLAUDE_CONFIG_DIR=${TEST_HOME}/.config/ccs/claude/deepseek" \
+    "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic" \
+    "ANTHROPIC_AUTH_TOKEN=sk-alias-test" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_EFFORT_LEVEL=max"
+
+  run_ccs run ds -- --print alias
+
+  assert_status 0
+  assert_output_contains "CCS_ACTIVE_PROFILE=deepseek"
+  assert_output_contains "ANTHROPIC_AUTH_TOKEN=sk-alias-test"
+}
+
+test_deepseek_profile_edit_creates_stub() {
+  cat >"${TEST_BIN}/fake-editor" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/fake-editor"
+
+  TEST_OUTPUT="$(
+    HOME="${TEST_HOME}" \
+    PATH="${TEST_BIN}:${ORIG_PATH}" \
+    EDITOR="${TEST_BIN}/fake-editor" \
+    "${ROOT_DIR}/bin/ccs" profile edit deepseek 2>&1
+  )"
+  TEST_STATUS=$?
+
+  assert_status 0
+  assert_file_exists "${TEST_HOME}/.config/ccs/profiles/deepseek.env"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash"
+  assert_file_contains "${TEST_HOME}/.config/ccs/profiles/deepseek.env" "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash"
+}
+
 run_test test_help_shows_main_commands
 run_test test_use_emits_exports_for_api_profile
 run_test test_run_uses_explicit_profile_and_invokes_claude
@@ -549,6 +632,10 @@ run_test test_use_mimo_auto_prompts_for_api_key_when_unconfigured
 run_test test_use_mimo_token_plan_defaults_to_sgp_when_blank
 run_test test_use_mimo_token_plan_accepts_custom_base_url
 run_test test_use_mimo_does_not_reprompt_when_already_configured
+run_test test_run_uses_deepseek_profile
+run_test test_use_deepseek_auto_prompts_for_api_key_when_unconfigured
+run_test test_deepseek_profile_edit_creates_stub
+run_test test_ds_alias_resolves_to_deepseek
 run_test test_init_bypass_creates_settings_local_json
 run_test test_init_bypass_merges_existing_json
 run_test test_init_bypass_overwrites_existing_default_mode

@@ -29,6 +29,8 @@ KNOWN_ENV_VARS=(
   "ANTHROPIC_DEFAULT_HAIKU_MODEL"
   "ENABLE_TOOL_SEARCH"
   "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"
+  "CLAUDE_CODE_SUBAGENT_MODEL"
+  "CLAUDE_CODE_EFFORT_LEVEL"
   "CCS_ACTIVE_PROFILE"
 )
 
@@ -61,9 +63,16 @@ Usage:
 EOF
 }
 
+normalize_profile() {
+  case "${1:-}" in
+    ds) printf 'deepseek\n' ;;
+    *)  printf '%s\n' "${1:-}" ;;
+  esac
+}
+
 is_supported_profile() {
   case "${1:-}" in
-    max|api|glm|mimo)
+    max|api|glm|mimo|deepseek|ds)
       return 0
       ;;
     *)
@@ -165,6 +174,10 @@ validate_profile() {
     mimo)
       profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'mimo' must define ANTHROPIC_BASE_URL."
       profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'mimo' must define ANTHROPIC_AUTH_TOKEN."
+      ;;
+    deepseek)
+      profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'deepseek' must define ANTHROPIC_BASE_URL."
+      profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'deepseek' must define ANTHROPIC_AUTH_TOKEN."
       ;;
   esac
 }
@@ -355,7 +368,7 @@ print_status() {
   printf 'Global profile: %s\n' "${global_profile}"
   printf 'Configured profiles:\n'
 
-  for profile in max api glm mimo; do
+  for profile in max api glm mimo deepseek; do
     if [[ -f "$(profile_file "${profile}")" ]]; then
       profile_path="$(profile_file "${profile}")"
       load_profile "${profile}"
@@ -416,6 +429,23 @@ write_mimo_profile_file() {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5"
 }
 
+write_deepseek_profile_file() {
+  local config_dir="$1"
+  local auth_token="$2"
+
+  write_profile_file "deepseek" \
+    "CLAUDE_CONFIG_DIR=${config_dir}" \
+    "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+    "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+    "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic" \
+    "ANTHROPIC_AUTH_TOKEN=${auth_token}" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash" \
+    "CLAUDE_CODE_EFFORT_LEVEL=max"
+}
+
 ensure_profile_stub() {
   local profile="$1"
   local default_dir
@@ -470,6 +500,19 @@ ensure_profile_stub() {
         "# Token Plan users: set ANTHROPIC_BASE_URL to the region URL from your subscription," \
         "# e.g. https://token-plan-sgp.xiaomimimo.com/anthropic"
       ;;
+    deepseek)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic" \
+        "# ANTHROPIC_AUTH_TOKEN=" \
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro" \
+        "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro" \
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash" \
+        "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash" \
+        "CLAUDE_CODE_EFFORT_LEVEL=max"
+      ;;
   esac
 }
 
@@ -495,6 +538,16 @@ auto_configure_profile_if_missing() {
       write_mimo_profile_file "${default_dir}" "${auth_token}" "${base_url}"
       mkdir -p "${default_dir}"
       printf 'Saved mimo profile to %s\n' "${file_path}" >&2
+      ;;
+    deepseek)
+      default_dir="$(default_claude_config_dir "${profile}")"
+      printf 'Profile "deepseek" is not configured yet. Setting it up now.\n' >&2
+      auth_token="$(prompt_with_default "DeepSeek API Key: " "")"
+      [[ -n "${auth_token}" ]] || die "API Key is required to configure deepseek profile."
+
+      write_deepseek_profile_file "${default_dir}" "${auth_token}"
+      mkdir -p "${default_dir}"
+      printf 'Saved deepseek profile to %s\n' "${file_path}" >&2
       ;;
   esac
 }
@@ -622,6 +675,10 @@ create_profile_interactively() {
       base_url="$(mimo_base_url_for_token "${auth_token}")"
       write_mimo_profile_file "${config_dir}" "${auth_token}" "${base_url}"
       ;;
+    deepseek)
+      auth_token="$(prompt_with_default "DeepSeek API Key: " "")"
+      write_deepseek_profile_file "${config_dir}" "${auth_token}"
+      ;;
   esac
 
   mkdir -p "${config_dir}"
@@ -684,6 +741,10 @@ cmd_init() {
     create_profile_interactively "mimo"
   fi
 
+  if prompt_yes_no "Configure deepseek profile? [y/N]: " "n"; then
+    create_profile_interactively "deepseek"
+  fi
+
   if prompt_yes_no "Install shell hooks now? [y/N]: " "n"; then
     run_installer_if_available
   fi
@@ -698,7 +759,8 @@ cmd_use() {
   local run_mode=0
   shift || true
 
-  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo."
+  profile="$(normalize_profile "${profile}")"
+  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds)."
 
   for flag in "$@"; do
     case "${flag}" in
@@ -744,7 +806,7 @@ cmd_run() {
     shift
   fi
 
-  profile="$(resolve_run_profile "${profile}" || true)"
+  profile="$(normalize_profile "$(resolve_run_profile "${profile}" || true)")"
   [[ -n "${profile}" ]] || die "No profile selected. Run 'ccs run <profile>' or set a global default with 'ccs use <profile> --global'."
 
   if [[ "${1:-}" == "--" ]]; then
@@ -762,7 +824,8 @@ cmd_profile() {
 
   case "${subcommand}" in
     edit)
-      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo."
+      profile="$(normalize_profile "${profile}")"
+      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds)."
       [[ -n "${EDITOR:-}" ]] || die "EDITOR is required for 'ccs profile edit'."
       ensure_profile_stub "${profile}"
       "${EDITOR}" "$(profile_file "${profile}")"
@@ -779,7 +842,7 @@ cmd_internal() {
 
   case "${action}" in
     global-env)
-      default_profile="$(get_default_profile 2>/dev/null || true)"
+      default_profile="$(normalize_profile "$(get_default_profile 2>/dev/null || true)")"
       if [[ -n "${default_profile}" ]] && is_supported_profile "${default_profile}" && [[ -f "$(profile_file "${default_profile}")" ]]; then
         emit_profile_activation "${default_profile}"
       fi
