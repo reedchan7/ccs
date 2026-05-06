@@ -72,7 +72,7 @@ normalize_profile() {
 
 is_supported_profile() {
   case "${1:-}" in
-    max|api|glm|mimo|deepseek|ds)
+    max|api|glm|mimo|deepseek|ds|kimi)
       return 0
       ;;
     *)
@@ -178,6 +178,10 @@ validate_profile() {
     deepseek)
       profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'deepseek' must define ANTHROPIC_BASE_URL."
       profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'deepseek' must define ANTHROPIC_AUTH_TOKEN."
+      ;;
+    kimi)
+      profile_has_key "ANTHROPIC_BASE_URL" || die "Profile 'kimi' must define ANTHROPIC_BASE_URL."
+      profile_has_key "ANTHROPIC_AUTH_TOKEN" || die "Profile 'kimi' must define ANTHROPIC_AUTH_TOKEN."
       ;;
   esac
 }
@@ -368,7 +372,7 @@ print_status() {
   printf 'Global profile: %s\n' "${global_profile}"
   printf 'Configured profiles:\n'
 
-  for profile in max api glm mimo deepseek; do
+  for profile in max api glm mimo deepseek kimi; do
     if [[ -f "$(profile_file "${profile}")" ]]; then
       profile_path="$(profile_file "${profile}")"
       load_profile "${profile}"
@@ -446,6 +450,22 @@ write_deepseek_profile_file() {
     "CLAUDE_CODE_EFFORT_LEVEL=max"
 }
 
+write_kimi_profile_file() {
+  local config_dir="$1"
+  local auth_token="$2"
+
+  write_profile_file "kimi" \
+    "CLAUDE_CONFIG_DIR=${config_dir}" \
+    "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+    "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+    "ANTHROPIC_BASE_URL=https://api.kimi.com/coding/" \
+    "ANTHROPIC_AUTH_TOKEN=${auth_token}" \
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=kimi-for-coding" \
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=kimi-for-coding" \
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=kimi-for-coding" \
+    "CLAUDE_CODE_SUBAGENT_MODEL=kimi-for-coding"
+}
+
 ensure_profile_stub() {
   local profile="$1"
   local default_dir
@@ -513,6 +533,18 @@ ensure_profile_stub() {
         "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash" \
         "CLAUDE_CODE_EFFORT_LEVEL=max"
       ;;
+    kimi)
+      write_profile_file "${profile}" \
+        "CLAUDE_CONFIG_DIR=${default_dir}" \
+        "CCS_SHARED_CLAUDE_DIR=${HOME}/.claude" \
+        "CCS_SHARED_PATHS=${DEFAULT_SHARED_PATHS}" \
+        "ANTHROPIC_BASE_URL=https://api.kimi.com/coding/" \
+        "# ANTHROPIC_AUTH_TOKEN=" \
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=kimi-for-coding" \
+        "ANTHROPIC_DEFAULT_SONNET_MODEL=kimi-for-coding" \
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL=kimi-for-coding" \
+        "CLAUDE_CODE_SUBAGENT_MODEL=kimi-for-coding"
+      ;;
   esac
 }
 
@@ -548,6 +580,16 @@ auto_configure_profile_if_missing() {
       write_deepseek_profile_file "${default_dir}" "${auth_token}"
       mkdir -p "${default_dir}"
       printf 'Saved deepseek profile to %s\n' "${file_path}" >&2
+      ;;
+    kimi)
+      default_dir="$(default_claude_config_dir "${profile}")"
+      printf 'Profile "kimi" is not configured yet. Setting it up now.\n' >&2
+      auth_token="$(prompt_with_default "Kimi Code API Key (sk-kimi-xxx): " "")"
+      [[ -n "${auth_token}" ]] || die "API Key is required to configure kimi profile."
+
+      write_kimi_profile_file "${default_dir}" "${auth_token}"
+      mkdir -p "${default_dir}"
+      printf 'Saved kimi profile to %s\n' "${file_path}" >&2
       ;;
   esac
 }
@@ -679,6 +721,10 @@ create_profile_interactively() {
       auth_token="$(prompt_with_default "DeepSeek API Key: " "")"
       write_deepseek_profile_file "${config_dir}" "${auth_token}"
       ;;
+    kimi)
+      auth_token="$(prompt_with_default "Kimi Code API Key (sk-kimi-xxx): " "")"
+      write_kimi_profile_file "${config_dir}" "${auth_token}"
+      ;;
   esac
 
   mkdir -p "${config_dir}"
@@ -745,6 +791,10 @@ cmd_init() {
     create_profile_interactively "deepseek"
   fi
 
+  if prompt_yes_no "Configure kimi profile? [y/N]: " "n"; then
+    create_profile_interactively "kimi"
+  fi
+
   if prompt_yes_no "Install shell hooks now? [y/N]: " "n"; then
     run_installer_if_available
   fi
@@ -760,7 +810,7 @@ cmd_use() {
   shift || true
 
   profile="$(normalize_profile "${profile}")"
-  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds)."
+  is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds), kimi."
 
   for flag in "$@"; do
     case "${flag}" in
@@ -825,7 +875,7 @@ cmd_profile() {
   case "${subcommand}" in
     edit)
       profile="$(normalize_profile "${profile}")"
-      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds)."
+      is_supported_profile "${profile}" || die "Unknown profile '${profile}'. Expected one of: max, api, glm, mimo, deepseek (or ds), kimi."
       [[ -n "${EDITOR:-}" ]] || die "EDITOR is required for 'ccs profile edit'."
       ensure_profile_stub "${profile}"
       "${EDITOR}" "$(profile_file "${profile}")"
