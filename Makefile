@@ -17,8 +17,8 @@ test: ## Run tests
 build: ## Build debug binary
 	cargo build --locked
 
-install: ## Install ccs locally
-	cargo build --release --locked
+install: ## Install local source build
+	cargo build --release
 	mkdir -p "$$HOME/.local/bin"
 	cp target/release/ccs "$$HOME/.local/bin/ccs"
 	"$$HOME/.local/bin/ccs" init --hooks-only

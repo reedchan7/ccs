@@ -173,3 +173,11 @@ fn version_command_shows_version() {
         Command::Version
     );
 }
+
+#[test]
+fn self_update_is_update_alias() {
+    assert_eq!(
+        parse(os_vec(&["ccs", "self-update"])).unwrap(),
+        Command::Update
+    );
+}

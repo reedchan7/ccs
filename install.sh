@@ -119,9 +119,10 @@ install_release() {
 install_from_source() {
   local root_dir="$1"
   [ -f "${root_dir}/Cargo.toml" ] || err "source directory does not contain Cargo.toml"
-  need_cmd cargo
+  command -v cargo >/dev/null 2>&1 \
+    || err "local source install requires Cargo; use the one-line installer to install a prebuilt release"
 
-  cargo build --release --locked --manifest-path "${root_dir}/Cargo.toml"
+  cargo build --release --manifest-path "${root_dir}/Cargo.toml"
   mkdir -p "${INSTALL_BIN_DIR}"
   install -m 0755 "${root_dir}/target/release/ccs" "${INSTALL_BIN_PATH}"
 }
@@ -134,28 +135,6 @@ local_source_dir() {
   root_dir="$(cd "$(dirname "${script_path}")" 2>/dev/null && pwd || true)"
   if [ -n "${root_dir}" ] && [ -f "${root_dir}/Cargo.toml" ]; then
     printf '%s' "${root_dir}"
-  fi
-}
-
-install_from_git() {
-  local tmpdir source_dir
-  need_cmd git
-  need_cmd cargo
-
-  tmpdir="$(make_tmpdir)"
-  source_dir="${tmpdir}/${REPO_NAME}"
-
-  git clone --depth 1 "https://github.com/${REPO_OWNER}/${REPO_NAME}.git" "${source_dir}"
-  install_from_source "${source_dir}"
-}
-
-install_fallback_source() {
-  local source_dir
-  source_dir="$(local_source_dir)"
-  if [ -n "${source_dir}" ]; then
-    install_from_source "${source_dir}"
-  else
-    install_from_git
   fi
 }
 
@@ -209,33 +188,42 @@ ensure_path() {
 }
 
 main() {
+  need_cmd install
+
+  local source_dir target version current current_tag
+  source_dir="$(local_source_dir)"
+  if [ -n "${source_dir}" ]; then
+    say "Installing from local source: ${source_dir}"
+    install_from_source "${source_dir}"
+    "${INSTALL_BIN_PATH}" init --hooks-only
+    ensure_path
+    say "Installed ccs to ${INSTALL_BIN_PATH}"
+    return
+  fi
+
   need_cmd curl
   need_cmd tar
   need_cmd awk
   need_cmd sed
   need_cmd find
   need_cmd head
-  need_cmd install
 
-  local target version current current_tag
   target="$(target_triple)"
   version="$(latest_version)"
-
   if [ -z "${version}" ]; then
-    say "Could not resolve latest release; building from source"
-    install_fallback_source
-  else
-    current="$(installed_version || true)"
-    current_tag=""
-    if [ -n "${current}" ]; then
-      current_tag="v${current#v}"
-    fi
+    err "no GitHub Release found for ${REPO_OWNER}/${REPO_NAME}; the curl installer only installs prebuilt release assets and does not require Rust/Cargo"
+  fi
 
-    if [ "${current_tag}" = "${version}" ] && [ -x "${INSTALL_BIN_PATH}" ]; then
-      say "ccs ${current} is already installed"
-    else
-      install_release "${version}" "${target}"
-    fi
+  current="$(installed_version || true)"
+  current_tag=""
+  if [ -n "${current}" ]; then
+    current_tag="v${current#v}"
+  fi
+
+  if [ "${current_tag}" = "${version}" ] && [ -x "${INSTALL_BIN_PATH}" ]; then
+    say "ccs ${current} is already installed"
+  else
+    install_release "${version}" "${target}"
   fi
 
   "${INSTALL_BIN_PATH}" init --hooks-only

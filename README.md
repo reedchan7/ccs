@@ -30,18 +30,10 @@ One-line install:
 curl -fsSL https://raw.githubusercontent.com/reedchan7/ccs/main/install.sh | bash
 ```
 
-The installer downloads the latest GitHub Release for your platform when one is
-available. If no release is available yet, it falls back to building from
-source. It installs `ccs` to `~/.local/bin/ccs`, installs the shell hook, and
-adds `~/.local/bin` to your shell PATH if needed.
-
-Install from a local checkout:
-
-```bash
-git clone https://github.com/reedchan7/ccs.git
-cd ccs
-bash install.sh
-```
+The installer downloads the latest prebuilt GitHub Release for your platform.
+It does not require Rust, Cargo, or cloning this repository. It installs `ccs`
+to `~/.local/bin/ccs`, installs the shell hook, and adds `~/.local/bin` to
+your shell PATH if needed.
 
 Then reload your shell:
 
@@ -61,10 +53,10 @@ Run the installer again to upgrade to the latest release:
 curl -fsSL https://raw.githubusercontent.com/reedchan7/ccs/main/install.sh | bash
 ```
 
-After `ccs` is installed, you can also upgrade with:
+After `ccs` is installed, you can also self-update with:
 
 ```bash
-ccs update
+ccs self-update
 ```
 
 ## Quick Start
@@ -80,7 +72,7 @@ ccs
 GLM example:
 
 ```bash
-export Z_AI_API_KEY=your-zai-key
+export ZAI_API_KEY=your-zai-key
 ccs setup glm -r
 ccs glm
 ```
@@ -97,7 +89,7 @@ ccs use ds --global         # make DeepSeek the default provider
 ccs profiles ls             # list configured profiles
 ccs profiles edit glm       # edit a provider profile
 ccs status                  # show default/profile state
-ccs update                  # update from GitHub Releases
+ccs self-update             # update from GitHub Releases
 ```
 
 `ccs setup` and `ccs init` are aliases. Without a provider, they default to
@@ -116,7 +108,7 @@ plus official MCP servers.
 Overseas Z.AI is the default platform:
 
 ```bash
-export Z_AI_API_KEY=your-zai-key
+export ZAI_API_KEY=your-zai-key
 ccs setup glm -r
 ccs glm
 ```
@@ -153,7 +145,7 @@ variables and opens `~/.config/ccs/profiles/glm.env`.
 
 Accepted key environment variables:
 
-- Overseas: `Z_AI_API_KEY` or `GLM_ZAI_API_KEY`
+- Overseas: `ZAI_API_KEY` or `GLM_ZAI_API_KEY`
 - Domestic: `ZHIPU_API_KEY` or `GLM_ZHIPU_API_KEY`
 
 ### Official MCPs
@@ -276,6 +268,12 @@ plain text.
 
 ## Development
 
+Local source install requires Rust and Cargo:
+
+```bash
+bash install.sh
+```
+
 ```bash
 make fmt
 make lint
@@ -302,7 +300,7 @@ Push a `v*` tag to build release assets for:
 Users can update from the matching GitHub Release asset with:
 
 ```bash
-ccs update
+ccs self-update
 ```
 
 ## License

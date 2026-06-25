@@ -71,6 +71,7 @@ enum CliCommand {
     /// Manage Claude permissions for the current project
     Permissions(PermissionsArgs),
     /// Update ccs from GitHub Releases
+    #[command(visible_alias = "self-update")]
     Update,
     /// Print version information
     Version,
