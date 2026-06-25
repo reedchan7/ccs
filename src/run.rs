@@ -1,14 +1,14 @@
 use std::ffi::OsString;
 use std::process::Command as ProcessCommand;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::agent::Agent;
 use crate::cli::{Command, ProfilesCommand};
-use crate::env::{render_shell_exports, KNOWN_ENV_VARS};
+use crate::env::{KNOWN_ENV_VARS, render_shell_exports};
 use crate::links::ensure_shared_links;
 use crate::paths::Paths;
-use crate::profile::{read_default_profile, write_default_profile, write_template, Profile};
+use crate::profile::{Profile, read_default_profile, write_default_profile, write_template};
 use crate::shell;
 
 pub fn execute(command: Command) -> Result<i32> {

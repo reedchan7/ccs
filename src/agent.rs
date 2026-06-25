@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 const SHARED_PATHS: &str = "CLAUDE.md,settings.json,skills,plugins,rules";
 
@@ -58,10 +58,7 @@ impl Agent {
             .join("claude")
             .join(self.canonical());
         let mut values = vec![
-            (
-                "CLAUDE_CONFIG_DIR".into(),
-                config_dir.display().to_string(),
-            ),
+            ("CLAUDE_CONFIG_DIR".into(), config_dir.display().to_string()),
             (
                 "CCS_SHARED_CLAUDE_DIR".into(),
                 home.join(".claude").display().to_string(),
@@ -106,10 +103,7 @@ impl Agent {
                         "ANTHROPIC_DEFAULT_OPUS_MODEL".into(),
                         "mimo-v2.5-pro".into(),
                     ),
-                    (
-                        "ANTHROPIC_DEFAULT_SONNET_MODEL".into(),
-                        "mimo-v2.5".into(),
-                    ),
+                    ("ANTHROPIC_DEFAULT_SONNET_MODEL".into(), "mimo-v2.5".into()),
                     ("ANTHROPIC_DEFAULT_HAIKU_MODEL".into(), "mimo-v2.5".into()),
                 ]);
             }

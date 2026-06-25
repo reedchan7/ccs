@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-use ccs::cli::{parse, Command, ProfilesCommand};
+use ccs::cli::{Command, ProfilesCommand, parse};
 
 fn os_vec(items: &[&str]) -> Vec<OsString> {
     items.iter().map(OsString::from).collect()

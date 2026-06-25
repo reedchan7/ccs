@@ -1,19 +1,19 @@
 # ccs
 
-`ccs` is a small Bash tool for switching Claude Code between five modes:
+`ccs` is a Rust CLI for running Claude Code with different session-level agents.
+It keeps Claude runtime data isolated per agent while sharing your base Claude
+configuration.
+
+Supported built-in agents:
 
 - `max`: Claude subscription login
 - `api`: Anthropic API key
 - `glm`: Anthropic-compatible GLM endpoint
-- `mimo`: Xiaomi MiMo (mimo-v2.5 / mimo-v2.5-pro) via Anthropic-compatible endpoint
-- `deepseek`: DeepSeek V4 (deepseek-v4-pro / deepseek-v4-flash) via Anthropic-compatible endpoint
+- `mimo`: Xiaomi MiMo via Anthropic-compatible endpoint
+- `deepseek`: DeepSeek V4 via Anthropic-compatible endpoint
+- `kimi`: Kimi coding endpoint
 
-It supports:
-
-- session-level switching
-- global default switching for new `zsh` and `bash` shells
-- one-off execution with a specific profile
-- shared base Claude config (`settings.json`, `CLAUDE.md`, `skills`, `plugins`, `rules`) with isolated runtime state per profile
+`ds` is a built-in alias for `deepseek`.
 
 ## Install
 
@@ -37,53 +37,29 @@ source ~/.bashrc
 
 ## Quick Start
 
-Initialize the profiles you actually want:
-
 ```bash
 ccs init
+ccs profiles add ds
+ccs use ds --global
+ccs
 ```
 
-Activate a profile in the current shell:
+Daily commands:
 
 ```bash
-eval "$(ccs use max)"
-eval "$(ccs use api)"
-eval "$(ccs use glm)"
-eval "$(ccs use mimo)"
-eval "$(ccs use deepseek)"
+ccs                    # open Claude Code with the default agent
+ccs ds                 # open Claude Code with DeepSeek
+ccs kimi --print hello # pass args through to Claude Code
+ccs use ds             # use DeepSeek for plain `claude` in this shell
+ccs use ds --global    # use DeepSeek by default for new shells and bare `ccs`
+ccs profiles ls
+ccs profiles edit ds
+ccs update
 ```
 
-Set the global default for new shells:
-
-```bash
-ccs use max --global
-ccs use api --global
-ccs use glm --global
-ccs use mimo --global
-ccs use deepseek --global
-```
-
-Run Claude once under a profile without changing the current shell:
-
-```bash
-ccs run max
-ccs run api -- --print "hello"
-ccs run glm
-ccs run -p glm
-ccs run deepseek
-```
-
-Show current configuration:
-
-```bash
-ccs status
-```
-
-Edit a profile manually:
-
-```bash
-ccs profile edit glm
-```
+`ccs use <agent>` changes the current shell only after `ccs init` installs the
+shell hook. Without the hook, `ccs use <agent>` prints the one-line fallback
+you can eval manually.
 
 ## Profiles
 
@@ -100,6 +76,7 @@ Examples:
 - `~/.config/ccs/profiles/glm.env`
 - `~/.config/ccs/profiles/mimo.env`
 - `~/.config/ccs/profiles/deepseek.env`
+- `~/.config/ccs/profiles/kimi.env`
 
 Each profile must define its own `CLAUDE_CONFIG_DIR`.
 
@@ -110,11 +87,16 @@ CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/glm
 CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
 CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
 ENABLE_TOOL_SEARCH=true
+# International (z.ai): https://api.z.ai/api/anthropic
+# Domestic (Zhipu/bigmodel): https://open.bigmodel.cn/api/anthropic
 ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
 ANTHROPIC_AUTH_TOKEN=your-token
-ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1
-ANTHROPIC_DEFAULT_SONNET_MODEL=glm-4.7
-ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air
+ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.2[1m]
+ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.2[1m]
+ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.7
+API_TIMEOUT_MS=3000000
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 ```
 
 Typical `api.env`:
@@ -162,22 +144,19 @@ CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
 CLAUDE_CODE_EFFORT_LEVEL=max
 ```
 
-Get your API key at https://platform.deepseek.com/api_keys.
+Typical `kimi.env`:
 
-The first time you run `eval "$(ccs use deepseek)"` or `ccs run deepseek` without a
-profile file, ccs prompts for your API Key and saves the profile automatically.
-
-For Xiaomi MiMo Token Plan subscribers, the BASE_URL is region-specific (the
-console assigns an exclusive URL per subscription, e.g.
-`https://token-plan-sgp.xiaomimimo.com/anthropic` for Singapore or
-`https://token-plan-cn.xiaomimimo.com/anthropic` for China), and the key is
-`tp-xxx`.
-
-The first time you run `eval "$(ccs use mimo)"` or `ccs run mimo` without a
-profile file, ccs prompts for your API Key. If it starts with `sk-`, ccs uses
-the pay-as-you-go BASE_URL automatically. If it starts with `tp-`, ccs prompts
-once for your Token Plan BASE_URL (defaulting to the Singapore region). The
-file is saved and subsequent runs load it silently.
+```dotenv
+CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/kimi
+CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
+CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
+ANTHROPIC_BASE_URL=https://api.kimi.com/coding/
+ANTHROPIC_AUTH_TOKEN=your-kimi-api-key
+ANTHROPIC_DEFAULT_OPUS_MODEL=kimi-for-coding
+ANTHROPIC_DEFAULT_SONNET_MODEL=kimi-for-coding
+ANTHROPIC_DEFAULT_HAIKU_MODEL=kimi-for-coding
+CLAUDE_CODE_SUBAGENT_MODEL=kimi-for-coding
+```
 
 ## Shared vs Isolated Data
 
@@ -204,35 +183,44 @@ Runtime and history data stay isolated in each profile directory, for example:
 - `downloads`
 - `cache`
 
-If an older profile already contains local files where a shared path now belongs, `ccs` will move the local copy into:
+If an older profile already contains local files where a shared path now
+belongs, `ccs` moves the local copy into:
 
 ```bash
 <CLAUDE_CONFIG_DIR>/.ccs-local-backup/
 ```
 
-and replace it with a symlink to the shared path.
-
-## Repository Layout
-
-- `bin/ccs`: main CLI implementation
-- `install.sh`: installer
-- `tests/test_ccs.sh`: shell-based integration tests
-- `tests/lib/assert.sh`: test helpers
-
-`install.sh` alone is not enough. `bin/ccs` is the actual tool implementation.
+and replaces it with a symlink to the shared path.
 
 ## Development
 
-Run tests:
-
 ```bash
-bash tests/test_ccs.sh
+make fmt
+make lint
+make test
+make build
 ```
 
-Run a syntax check:
+Useful direct commands:
 
 ```bash
-bash -n bin/ccs install.sh tests/test_ccs.sh tests/lib/assert.sh
+cargo test --all
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+## Release
+
+Push a `v*` tag to build release assets for:
+
+- Linux x86_64
+- Linux aarch64
+- macOS x86_64
+- macOS aarch64
+
+Users can update from the matching GitHub Release asset with:
+
+```bash
+ccs update
 ```
 
 ## Notes

@@ -2,7 +2,7 @@ use ccs::agent::Agent;
 use ccs::env::render_shell_exports;
 use ccs::links::ensure_shared_links;
 use ccs::paths::Paths;
-use ccs::profile::{read_default_profile, write_default_profile, Profile};
+use ccs::profile::{Profile, read_default_profile, write_default_profile};
 use tempfile::TempDir;
 
 #[test]

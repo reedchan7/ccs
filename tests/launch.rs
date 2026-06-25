@@ -6,7 +6,11 @@ use support::TestHome;
 
 fn ccs(home: &TestHome) -> Command {
     let mut cmd = Command::cargo_bin("ccs").unwrap();
-    let path = format!("{}:{}", home.bin().display(), std::env::var("PATH").unwrap());
+    let path = format!(
+        "{}:{}",
+        home.bin().display(),
+        std::env::var("PATH").unwrap()
+    );
     cmd.env("CCS_TEST_HOME", home.path())
         .env("CCS_TEST_NO_EXEC", "1")
         .env("PATH", path);

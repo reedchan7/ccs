@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub fn set_bypass_permissions(project_dir: &Path) -> Result<PathBuf> {
     let claude_dir = project_dir.join(".claude");

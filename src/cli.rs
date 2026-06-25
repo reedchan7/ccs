@@ -1,6 +1,6 @@
 use std::ffi::{OsStr, OsString};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {

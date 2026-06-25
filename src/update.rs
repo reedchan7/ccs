@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 pub fn target_triple() -> &'static str {
     match (std::env::consts::OS, std::env::consts::ARCH) {
