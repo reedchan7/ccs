@@ -251,6 +251,9 @@ fn write_profile_values(
     }
 
     fs::write(&file, next)?;
+    let mut permissions = fs::metadata(&file)?.permissions();
+    permissions.set_mode(0o600);
+    fs::set_permissions(&file, permissions)?;
     Ok(file)
 }
 

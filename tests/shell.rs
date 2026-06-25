@@ -1,5 +1,7 @@
 mod support;
 
+use std::os::unix::fs::PermissionsExt;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use support::TestHome;
@@ -138,6 +140,8 @@ fn init_accepts_agent_to_prepare_as_default() {
 fn setup_glm_with_existing_token_prepares_mcp_config() {
     let home = TestHome::new();
     write_glm(&home);
+    let profile_file = home.path().join(".config/ccs/profiles/glm.env");
+    let mcp_file = home.path().join(".config/ccs/claude/glm/.claude.json");
 
     ccs(&home)
         .args(["setup", "glm"])
@@ -149,15 +153,13 @@ fn setup_glm_with_existing_token_prepares_mcp_config() {
         .stdout(predicate::str::contains("GLM auto compact window: 900000"))
         .stdout(predicate::str::contains("Next: ccs profiles edit glm").not());
 
-    let config =
-        std::fs::read_to_string(home.path().join(".config/ccs/claude/glm/.claude.json")).unwrap();
+    let config = std::fs::read_to_string(&mcp_file).unwrap();
     assert!(config.contains("\"web-search-prime\""));
     assert!(config.contains("\"web-reader\""));
     assert!(config.contains("\"zread\""));
     assert!(config.contains("\"glm-5v-turbo\""));
 
-    let profile =
-        std::fs::read_to_string(home.path().join(".config/ccs/profiles/glm.env")).unwrap();
+    let profile = std::fs::read_to_string(&profile_file).unwrap();
     assert!(profile.contains("GLM_PLATFORM=zai"));
     assert!(profile.contains("GLM_ZAI_API_KEY=glm-token"));
     assert!(profile.contains("GLM_CONTEXT_TOKENS=1000000"));
@@ -165,6 +167,18 @@ fn setup_glm_with_existing_token_prepares_mcp_config() {
     assert!(profile.contains("Z_AI_VISION_MODEL=glm-5v-turbo"));
     assert!(profile.contains("ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.2[1m]"));
     assert!(profile.contains("ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.7"));
+    assert_eq!(
+        std::fs::metadata(&profile_file)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+    assert_eq!(
+        std::fs::metadata(&mcp_file).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
 }
 
 #[test]

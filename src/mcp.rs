@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -86,6 +87,9 @@ pub fn ensure_provider_mcp(
     );
 
     fs::write(&file, serde_json::to_string_pretty(&value)? + "\n")?;
+    let mut permissions = fs::metadata(&file)?.permissions();
+    permissions.set_mode(0o600);
+    fs::set_permissions(&file, permissions)?;
     Ok(Some(file))
 }
 

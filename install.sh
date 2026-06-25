@@ -72,6 +72,29 @@ installed_version() {
   fi
 }
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    err "missing required command: sha256sum or shasum"
+  fi
+}
+
+verify_checksum() {
+  local archive="$1"
+  local checksum_url="$2"
+  local checksum_file expected actual
+
+  checksum_file="${archive}.sha256"
+  curl -fsSL "${checksum_url}" -o "${checksum_file}"
+  expected="$(awk '{print $1}' "${checksum_file}" | head -n 1)"
+  actual="$(sha256_file "${archive}")"
+  [ -n "${expected}" ] || err "empty checksum for ${archive}"
+  [ "${actual}" = "${expected}" ] || err "checksum mismatch for ${archive}"
+}
+
 install_release() {
   local version="$1"
   local target="$2"
@@ -84,6 +107,7 @@ install_release() {
 
   say "Downloading ${url}"
   curl -fL --progress-bar "${url}" -o "${archive}"
+  verify_checksum "${archive}" "${url}.sha256"
   tar -xzf "${archive}" -C "${tmpdir}"
   extracted="$(find "${tmpdir}" -type f -name ccs | head -n 1)"
   [ -n "${extracted}" ] || err "release archive did not contain ccs"
