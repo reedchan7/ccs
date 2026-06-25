@@ -12,6 +12,7 @@ fn ccs(home: &TestHome) -> Command {
     for key in [
         "GLM_ZAI_API_KEY",
         "GLM_ZHIPU_API_KEY",
+        "ZAI_API_KEY",
         "Z_AI_API_KEY",
         "ZHIPU_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
@@ -207,7 +208,7 @@ fn setup_glm_reconfigure_reads_environment_keys() {
     write_glm(&home);
 
     ccs(&home)
-        .env("Z_AI_API_KEY", "fresh-oversea-token")
+        .env("ZAI_API_KEY", "fresh-oversea-token")
         .env("ZHIPU_API_KEY", "fresh-domestic-token")
         .args(["setup", "glm", "-r"])
         .assert()

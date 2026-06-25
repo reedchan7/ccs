@@ -94,6 +94,7 @@ fn glm_template_contains_official_vision_mcp_mode() {
         .collect();
 
     assert_eq!(values.get("Z_AI_MODE"), Some(&"ZAI"));
+    assert!(!values.contains_key("ZAI_API_KEY"));
     assert!(!values.contains_key("Z_AI_API_KEY"));
 }
 

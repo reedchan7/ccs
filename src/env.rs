@@ -27,6 +27,7 @@ pub const KNOWN_ENV_VARS: &[&str] = &[
     "GLM_ZHIPU_API_KEY",
     "GLM_CONTEXT_TOKENS",
     "GLM_AUTO_COMPACT_PERCENT",
+    "ZAI_API_KEY",
     "Z_AI_API_KEY",
     "ZHIPU_API_KEY",
     "Z_AI_MODE",
@@ -44,7 +45,7 @@ pub fn render_shell_exports(
         output.push_str(&format!("unset {key}\n"));
     }
     for (key, value) in profile.iter() {
-        if key.starts_with("CCS_") || key.starts_with("GLM_") {
+        if skip_profile_env(provider, key) {
             continue;
         }
         output.push_str(&format!("export {key}={}\n", shell_quote(value)));
@@ -57,6 +58,13 @@ pub fn render_shell_exports(
         shell_quote(provider.canonical())
     ));
     Ok(output)
+}
+
+pub fn skip_profile_env(provider: Provider, key: &str) -> bool {
+    key.starts_with("CCS_")
+        || key.starts_with("GLM_")
+        || provider == Provider::Glm
+            && matches!(key, "ZAI_API_KEY" | "Z_AI_API_KEY" | "ZHIPU_API_KEY")
 }
 
 pub fn derived_provider_env(
@@ -75,7 +83,7 @@ pub fn derived_provider_env(
     Ok(vec![
         ("ANTHROPIC_BASE_URL", glm.anthropic_base_url.to_owned()),
         ("ANTHROPIC_AUTH_TOKEN", glm.auth_token.clone()),
-        ("Z_AI_API_KEY", glm.auth_token),
+        ("ZAI_API_KEY", glm.auth_token),
         ("Z_AI_MODE", glm.z_ai_mode.to_owned()),
         ("Z_AI_VISION_MODEL", glm.vision_model),
         ("CLAUDE_CODE_AUTO_COMPACT_WINDOW", glm.auto_compact_window),

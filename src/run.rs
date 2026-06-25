@@ -6,7 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{Result, bail};
 
 use crate::cli::{Command, ProfilesCommand};
-use crate::env::{KNOWN_ENV_VARS, derived_provider_env, render_shell_exports};
+use crate::env::{KNOWN_ENV_VARS, derived_provider_env, render_shell_exports, skip_profile_env};
 use crate::glm::{GlmPlatform, resolve_glm};
 use crate::links::ensure_shared_links;
 use crate::mcp::{ensure_provider_mcp, glm_mcp_configured, glm_mcp_file};
@@ -213,7 +213,7 @@ pub fn launch_provider(
         command.env_remove(key);
     }
     for (key, value) in profile.iter() {
-        if !key.starts_with("CCS_") && !key.starts_with("GLM_") {
+        if !skip_profile_env(provider, key) {
             command.env(key, value);
         }
     }

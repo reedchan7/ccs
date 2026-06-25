@@ -61,6 +61,7 @@ pub fn ensure_provider_mcp(
             "command": "npx",
             "args": ["-y", "@z_ai/mcp-server@latest"],
             "env": {
+                // Official Z.AI MCP server currently reads this env name.
                 "Z_AI_API_KEY": glm.auth_token,
                 "Z_AI_MODE": glm.z_ai_mode,
                 "Z_AI_VISION_MODEL": glm.vision_model

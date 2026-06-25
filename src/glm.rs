@@ -120,14 +120,24 @@ fn auth_token(profile: &Profile, platform: GlmPlatform) -> Result<String> {
         GlmPlatform::Zai => "GLM_ZAI_API_KEY",
         GlmPlatform::Zhipu => "GLM_ZHIPU_API_KEY",
     };
-    for key in [platform_key, "Z_AI_API_KEY", "ANTHROPIC_AUTH_TOKEN"] {
+    let platform_alias = match platform {
+        GlmPlatform::Zai => "ZAI_API_KEY",
+        GlmPlatform::Zhipu => "ZHIPU_API_KEY",
+    };
+    for key in [
+        platform_key,
+        platform_alias,
+        "ZAI_API_KEY",
+        "Z_AI_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+    ] {
         if let Some(value) = non_empty_value(profile, key) {
             return Ok(value.to_owned());
         }
     }
 
     bail!(
-        "GLM platform '{}' must define {platform_key}, Z_AI_API_KEY, or ANTHROPIC_AUTH_TOKEN",
+        "GLM platform '{}' must define {platform_key}, {platform_alias}, or ANTHROPIC_AUTH_TOKEN",
         platform.canonical()
     )
 }

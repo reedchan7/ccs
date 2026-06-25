@@ -95,8 +95,30 @@ fn ccs_glm_exports_vision_mcp_env_to_claude() {
         .success()
         .stdout(predicate::str::contains("CCS_ACTIVE_PROFILE=glm"))
         .stdout(predicate::str::contains("ANTHROPIC_AUTH_TOKEN=glm-token"))
-        .stdout(predicate::str::contains("Z_AI_API_KEY=glm-token"))
+        .stdout(predicate::str::contains("ZAI_API_KEY=glm-token"))
         .stdout(predicate::str::contains("Z_AI_MODE=ZAI"));
+}
+
+#[test]
+fn ccs_glm_launch_normalizes_legacy_zai_key() {
+    let home = TestHome::new();
+    home.write_fake_claude();
+    std::fs::create_dir_all(home.path().join(".config/ccs/profiles")).unwrap();
+    std::fs::write(
+        home.path().join(".config/ccs/profiles/glm.env"),
+        format!(
+            "CLAUDE_CONFIG_DIR={}\nZ_AI_API_KEY=legacy-token\n",
+            home.path().join(".config/ccs/claude/glm").display()
+        ),
+    )
+    .unwrap();
+
+    ccs(&home)
+        .args(["glm", "--print", "vision"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ZAI_API_KEY=legacy-token"))
+        .stdout(predicate::str::contains("Z_AI_API_KEY=\n"));
 }
 
 #[test]
@@ -125,7 +147,7 @@ fn ccs_glm_platform_option_uses_domestic_key_and_endpoints() {
         .stdout(predicate::str::contains(
             "ANTHROPIC_AUTH_TOKEN=domestic-token",
         ))
-        .stdout(predicate::str::contains("Z_AI_API_KEY=domestic-token"))
+        .stdout(predicate::str::contains("ZAI_API_KEY=domestic-token"))
         .stdout(predicate::str::contains("Z_AI_MODE=ZHIPU"))
         .stdout(predicate::str::contains("ARGS=--print vision "));
 

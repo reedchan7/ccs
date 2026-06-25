@@ -48,7 +48,9 @@ impl Profile {
                 &[
                     "GLM_ZAI_API_KEY",
                     "GLM_ZHIPU_API_KEY",
+                    "ZAI_API_KEY",
                     "Z_AI_API_KEY",
+                    "ZHIPU_API_KEY",
                     "ANTHROPIC_AUTH_TOKEN",
                 ],
             )?,
@@ -127,7 +129,7 @@ pub fn write_glm_defaults(
     let active_token = active_glm_token(&existing, platform, reconfigure);
     let zai_token = keyed_token(
         existing.get("GLM_ZAI_API_KEY"),
-        first_env(&["GLM_ZAI_API_KEY", "Z_AI_API_KEY"]),
+        first_env(&["GLM_ZAI_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"]),
         reconfigure,
     );
     let zhipu_token = keyed_token(
@@ -179,12 +181,25 @@ fn active_glm_token(
         GlmPlatform::Zai => existing_non_empty(existing, "GLM_ZAI_API_KEY"),
         GlmPlatform::Zhipu => existing_non_empty(existing, "GLM_ZHIPU_API_KEY"),
     }
+    .or_else(|| {
+        if platform == GlmPlatform::Zhipu {
+            existing_non_empty(existing, "ZHIPU_API_KEY")
+        } else {
+            None
+        }
+    })
+    .or_else(|| existing_non_empty(existing, "ZAI_API_KEY"))
     .or_else(|| existing_non_empty(existing, "Z_AI_API_KEY"))
     .or_else(|| existing_non_empty(existing, "ANTHROPIC_AUTH_TOKEN"));
 
     let env_token = match platform {
-        GlmPlatform::Zai => first_env(&["GLM_ZAI_API_KEY", "Z_AI_API_KEY"]),
-        GlmPlatform::Zhipu => first_env(&["GLM_ZHIPU_API_KEY", "ZHIPU_API_KEY", "Z_AI_API_KEY"]),
+        GlmPlatform::Zai => first_env(&["GLM_ZAI_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"]),
+        GlmPlatform::Zhipu => first_env(&[
+            "GLM_ZHIPU_API_KEY",
+            "ZHIPU_API_KEY",
+            "ZAI_API_KEY",
+            "Z_AI_API_KEY",
+        ]),
     }
     .or_else(|| first_env(&["ANTHROPIC_AUTH_TOKEN"]));
 

@@ -29,7 +29,7 @@ impl TestHome {
         let path = self.bin.join("claude");
         std::fs::write(
             &path,
-            "#!/usr/bin/env bash\nprintf 'CCS_ACTIVE_PROFILE=%s\\n' \"${CCS_ACTIVE_PROFILE:-}\"\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' \"${CLAUDE_CONFIG_DIR:-}\"\nprintf 'ANTHROPIC_BASE_URL=%s\\n' \"${ANTHROPIC_BASE_URL:-}\"\nprintf 'ANTHROPIC_AUTH_TOKEN=%s\\n' \"${ANTHROPIC_AUTH_TOKEN:-}\"\nprintf 'Z_AI_API_KEY=%s\\n' \"${Z_AI_API_KEY:-}\"\nprintf 'Z_AI_MODE=%s\\n' \"${Z_AI_MODE:-}\"\nprintf 'ARGS='\nprintf '%s ' \"$@\"\nprintf '\\n'\n",
+            "#!/usr/bin/env bash\nprintf 'CCS_ACTIVE_PROFILE=%s\\n' \"${CCS_ACTIVE_PROFILE:-}\"\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' \"${CLAUDE_CONFIG_DIR:-}\"\nprintf 'ANTHROPIC_BASE_URL=%s\\n' \"${ANTHROPIC_BASE_URL:-}\"\nprintf 'ANTHROPIC_AUTH_TOKEN=%s\\n' \"${ANTHROPIC_AUTH_TOKEN:-}\"\nprintf 'ZAI_API_KEY=%s\\n' \"${ZAI_API_KEY:-}\"\nprintf 'Z_AI_API_KEY=%s\\n' \"${Z_AI_API_KEY:-}\"\nprintf 'Z_AI_MODE=%s\\n' \"${Z_AI_MODE:-}\"\nprintf 'ARGS='\nprintf '%s ' \"$@\"\nprintf '\\n'\n",
         )
         .unwrap();
         use std::os::unix::fs::PermissionsExt;

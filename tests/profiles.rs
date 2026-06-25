@@ -69,9 +69,10 @@ fn glm_shell_exports_derive_zai_api_key_for_vision_mcp() {
     let profile = Profile::load(&paths, Provider::Glm).unwrap();
     let exports = render_shell_exports(&profile, Provider::Glm, None).unwrap();
 
+    assert!(exports.contains("unset ZAI_API_KEY"));
     assert!(exports.contains("unset Z_AI_API_KEY"));
     assert!(exports.contains("unset Z_AI_MODE"));
-    assert!(exports.contains("export Z_AI_API_KEY='glm token'"));
+    assert!(exports.contains("export ZAI_API_KEY='glm token'"));
     assert!(exports.contains("export Z_AI_MODE='ZAI'"));
     assert!(exports.contains("export Z_AI_VISION_MODEL='glm-5v-turbo'"));
     assert!(exports.contains("export CLAUDE_CODE_AUTO_COMPACT_WINDOW='900000'"));
@@ -103,17 +104,35 @@ fn explicit_zai_api_key_wins_over_glm_auth_token() {
     std::fs::create_dir_all(paths.profiles_dir()).unwrap();
     std::fs::write(
         paths.profile_file(Provider::Glm),
-        "CLAUDE_CONFIG_DIR=/tmp/glm\nANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic\nANTHROPIC_AUTH_TOKEN=glm-token\nZ_AI_API_KEY=mcp-token\nZ_AI_MODE=ZHIPU\n",
+        "CLAUDE_CONFIG_DIR=/tmp/glm\nANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic\nANTHROPIC_AUTH_TOKEN=glm-token\nZAI_API_KEY=mcp-token\nZ_AI_MODE=ZHIPU\n",
     )
     .unwrap();
 
     let profile = Profile::load(&paths, Provider::Glm).unwrap();
     let exports = render_shell_exports(&profile, Provider::Glm, None).unwrap();
 
-    assert!(exports.contains("export Z_AI_API_KEY='mcp-token'"));
+    assert!(exports.contains("export ZAI_API_KEY='mcp-token'"));
     assert!(exports.contains("export Z_AI_MODE='ZHIPU'"));
-    assert!(!exports.contains("export Z_AI_API_KEY='glm-token'"));
+    assert!(!exports.contains("export ZAI_API_KEY='glm-token'"));
     assert!(!exports.contains("export Z_AI_MODE='ZAI'"));
+}
+
+#[test]
+fn legacy_z_ai_api_key_still_works() {
+    let home = TempDir::new().unwrap();
+    let paths = Paths::from_home(home.path());
+    std::fs::create_dir_all(paths.profiles_dir()).unwrap();
+    std::fs::write(
+        paths.profile_file(Provider::Glm),
+        "CLAUDE_CONFIG_DIR=/tmp/glm\nZ_AI_API_KEY=legacy-token\n",
+    )
+    .unwrap();
+
+    let profile = Profile::load(&paths, Provider::Glm).unwrap();
+    let exports = render_shell_exports(&profile, Provider::Glm, None).unwrap();
+
+    assert!(exports.contains("export ZAI_API_KEY='legacy-token'"));
+    assert!(!exports.contains("export Z_AI_API_KEY="));
 }
 
 #[test]
@@ -132,8 +151,26 @@ fn glm_shell_exports_resolve_domestic_platform_from_profile() {
 
     assert!(exports.contains("export ANTHROPIC_BASE_URL='https://open.bigmodel.cn/api/anthropic'"));
     assert!(exports.contains("export ANTHROPIC_AUTH_TOKEN='domestic-token'"));
-    assert!(exports.contains("export Z_AI_API_KEY='domestic-token'"));
+    assert!(exports.contains("export ZAI_API_KEY='domestic-token'"));
     assert!(exports.contains("export Z_AI_MODE='ZHIPU'"));
+}
+
+#[test]
+fn glm_shell_exports_normalizes_domestic_api_key_alias() {
+    let home = TempDir::new().unwrap();
+    let paths = Paths::from_home(home.path());
+    std::fs::create_dir_all(paths.profiles_dir()).unwrap();
+    std::fs::write(
+        paths.profile_file(Provider::Glm),
+        "CLAUDE_CONFIG_DIR=/tmp/glm\nGLM_PLATFORM=zhipu\nZHIPU_API_KEY=domestic-token\n",
+    )
+    .unwrap();
+
+    let profile = Profile::load(&paths, Provider::Glm).unwrap();
+    let exports = render_shell_exports(&profile, Provider::Glm, None).unwrap();
+
+    assert!(exports.contains("export ZAI_API_KEY='domestic-token'"));
+    assert!(!exports.contains("export ZHIPU_API_KEY="));
 }
 
 #[test]
