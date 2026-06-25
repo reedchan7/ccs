@@ -104,6 +104,11 @@ pub fn execute(command: Command) -> Result<i32> {
             }
             Ok(0)
         }
+        Command::PermissionsBypass => {
+            let file = crate::permissions::set_bypass_permissions(&std::env::current_dir()?)?;
+            println!("Updated {}", file.display());
+            Ok(0)
+        }
         Command::Help => {
             print_help();
             Ok(0)
