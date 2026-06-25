@@ -109,11 +109,14 @@ pub fn execute(command: Command) -> Result<i32> {
             println!("Updated {}", file.display());
             Ok(0)
         }
+        Command::Update => {
+            crate::update::run_update()?;
+            Ok(0)
+        }
         Command::Help => {
             print_help();
             Ok(0)
         }
-        other => bail!("command not implemented yet: {other:?}"),
     }
 }
 
