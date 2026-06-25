@@ -8,7 +8,7 @@ use crate::cli::{Command, ProfilesCommand};
 use crate::env::{render_shell_exports, KNOWN_ENV_VARS};
 use crate::links::ensure_shared_links;
 use crate::paths::Paths;
-use crate::profile::{read_default_profile, write_default_profile, Profile};
+use crate::profile::{read_default_profile, write_default_profile, write_template, Profile};
 use crate::shell;
 
 pub fn execute(command: Command) -> Result<i32> {
@@ -26,10 +26,36 @@ pub fn execute(command: Command) -> Result<i32> {
         }
         Command::Profiles(ProfilesCommand::List) => {
             for agent in Agent::all() {
-                if paths.profile_file(*agent).exists() {
-                    println!("{}", agent.canonical());
+                let file = paths.profile_file(*agent);
+                if file.exists() {
+                    println!("{} -> {}", agent.canonical(), file.display());
                 }
             }
+            Ok(0)
+        }
+        Command::Profiles(ProfilesCommand::Add { agent }) => {
+            let agent = Agent::parse(&agent)?;
+            let file = write_template(&paths, agent)?;
+            println!("Added {} profile: {}", agent.canonical(), file.display());
+            Ok(0)
+        }
+        Command::Profiles(ProfilesCommand::Edit { agent }) => {
+            let agent = Agent::parse(&agent)?;
+            let file = write_template(&paths, agent)?;
+            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
+            let status = std::process::Command::new(editor).arg(file).status()?;
+            Ok(status.code().unwrap_or(1))
+        }
+        Command::Profiles(ProfilesCommand::Remove { agent, yes }) => {
+            let agent = Agent::parse(&agent)?;
+            if !yes {
+                bail!("refusing to remove {} without --yes", agent.canonical());
+            }
+            let file = paths.profile_file(agent);
+            if file.exists() {
+                std::fs::remove_file(&file)?;
+            }
+            println!("Removed {}", agent.canonical());
             Ok(0)
         }
         Command::Use { agent, global } => {
@@ -59,6 +85,22 @@ pub fn execute(command: Command) -> Result<i32> {
             println!("Shell hook installed");
             if !hooks_only {
                 println!("Next: ccs profiles add ds");
+            }
+            Ok(0)
+        }
+        Command::Status => {
+            let active = std::env::var("CCS_ACTIVE_PROFILE").unwrap_or_else(|_| "none".into());
+            let default = read_default_profile(&paths)?
+                .map(|agent| agent.canonical().to_owned())
+                .unwrap_or_else(|| "none".into());
+            println!("Active agent: {active}");
+            println!("Default agent: {default}");
+            println!("Profiles:");
+            for agent in Agent::all() {
+                let file = paths.profile_file(*agent);
+                if file.exists() {
+                    println!("  {} -> {}", agent.canonical(), file.display());
+                }
             }
             Ok(0)
         }
