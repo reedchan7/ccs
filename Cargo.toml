@@ -1,6 +1,6 @@
 [package]
 name = "ccs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/reedchan7/ccs"
@@ -8,7 +8,7 @@ description = "Claude Code session switcher"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4.6", features = ["derive"] }
 directories = "6"
 dotenvy = "0.15"
 self_update = { version = "0.44.0", features = ["archive-tar", "compression-flate2"] }

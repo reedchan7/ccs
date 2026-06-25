@@ -1,10 +1,12 @@
-pub mod agent;
 pub mod cli;
 pub mod env;
+pub mod glm;
 pub mod links;
+pub mod mcp;
 pub mod paths;
 pub mod permissions;
 pub mod profile;
+pub mod provider;
 pub mod run;
 pub mod shell;
 pub mod update;

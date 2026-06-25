@@ -1,11 +1,9 @@
-.DEFAULT_GOAL := Help
+.DEFAULT_GOAL := help
 
-.PHONY: Help help fmt lint test build install release-local
+.PHONY: help fmt lint test build install release-local
 
-Help: ## Show available make targets
+help: ## Show available make targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[[:alnum:]_-]+:.*## / {printf "make %-13s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-
-help: Help
 
 fmt: ## Format Rust code
 	cargo fmt --all

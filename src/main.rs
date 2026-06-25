@@ -1,16 +1,14 @@
-use anyhow::Result;
-
 fn main() {
-    match run() {
+    let command = match ccs::cli::parse(std::env::args_os()) {
+        Ok(command) => command,
+        Err(error) => error.exit(),
+    };
+
+    match ccs::run::execute(command) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("{error:#}");
             std::process::exit(1);
         }
     }
-}
-
-fn run() -> Result<i32> {
-    let command = ccs::cli::parse(std::env::args_os())?;
-    ccs::run::execute(command)
 }

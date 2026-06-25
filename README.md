@@ -1,19 +1,20 @@
 # ccs
 
-`ccs` is a Rust CLI for running Claude Code with different session-level agents.
-It keeps Claude runtime data isolated per agent while sharing your base Claude
+`ccs` is a Rust CLI for running Claude Code with API provider profiles. It keeps
+Claude runtime data isolated per provider while sharing your base Claude
 configuration.
 
-Supported built-in agents:
+Supported built-in providers:
 
-- `max`: Claude subscription login
-- `api`: Anthropic API key
+- `anthropic`: Anthropic API key
 - `glm`: Anthropic-compatible GLM endpoint
 - `mimo`: Xiaomi MiMo via Anthropic-compatible endpoint
 - `deepseek`: DeepSeek V4 via Anthropic-compatible endpoint
 - `kimi`: Kimi coding endpoint
 
 `ds` is a built-in alias for `deepseek`.
+
+Use the plain `claude` command for your local Claude subscription login.
 
 ## Install
 
@@ -38,28 +39,68 @@ source ~/.bashrc
 ## Quick Start
 
 ```bash
-ccs init
-ccs profiles add ds
-ccs use ds --global
+ccs setup ds
+ccs profiles edit ds
 ccs
 ```
 
 Daily commands:
 
 ```bash
-ccs                    # open Claude Code with the default agent
+ccs                    # open Claude Code with the default provider
 ccs ds                 # open Claude Code with DeepSeek
 ccs kimi --print hello # pass args through to Claude Code
 ccs use ds             # use DeepSeek for plain `claude` in this shell
 ccs use ds --global    # use DeepSeek by default for new shells and bare `ccs`
+ccs setup kimi         # install shell hook and make Kimi the default
+ccs setup anthropic    # install shell hook and make Anthropic the default
 ccs profiles ls
 ccs profiles edit ds
 ccs update
 ```
 
-`ccs use <agent>` changes the current shell only after `ccs init` installs the
-shell hook. Without the hook, `ccs use <agent>` prints the one-line fallback
+`ccs setup` and `ccs init` are aliases. They install the shell hook, create the
+selected profile if needed, and set it as the default provider. Without a
+provider, they still default to DeepSeek. Edit the generated profile once to add
+your API token.
+
+`ccs use <provider>` changes the current shell only after `ccs setup` installs
+the shell hook. Without the hook, `ccs use <provider>` prints the one-line fallback
 you can eval manually.
+
+GLM with Claude Code and official Z.AI MCPs:
+
+```bash
+ccs setup glm
+ccs profiles edit glm
+ccs use glm
+ccs glm
+ccs glm -p zhipu
+ccs setup glm -p zai
+ccs setup glm -r
+```
+
+`ccs glm` prepares the GLM profile-scoped Claude Code config before launch. It
+adds Z.AI's official vision, web search, web reader, and ZRead MCP servers to
+`~/.config/ccs/claude/glm/.claude.json`, so it does not modify your regular
+Claude Code session or other provider profiles.
+
+Inside Claude Code, use `/effort max` for harder coding tasks. Image analysis
+works through `zai-mcp-server`; keep screenshots or mockups in the repo and
+refer to their paths, for example `describe ./screenshots/login.png`.
+
+GLM supports two platforms: `zai` for the international Z.AI endpoint and
+`zhipu` for the domestic BigModel endpoint. Use `-p` or `--platform` on
+`setup`, `use`, or direct launch. Use `-r` or `--reconfigure` to refresh the
+GLM profile from `Z_AI_API_KEY` and `ZHIPU_API_KEY` in your environment, then
+open the profile in an interactive terminal:
+
+```bash
+ccs setup glm -r
+ccs setup glm -p zhipu
+ccs use glm -p zhipu
+ccs glm -p zhipu --print "describe ./screenshots/login.png"
+```
 
 ## Profiles
 
@@ -71,8 +112,7 @@ Profiles live under:
 
 Examples:
 
-- `~/.config/ccs/profiles/max.env`
-- `~/.config/ccs/profiles/api.env`
+- `~/.config/ccs/profiles/anthropic.env`
 - `~/.config/ccs/profiles/glm.env`
 - `~/.config/ccs/profiles/mimo.env`
 - `~/.config/ccs/profiles/deepseek.env`
@@ -87,33 +127,36 @@ CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/glm
 CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
 CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
 ENABLE_TOOL_SEARCH=true
-# International (z.ai): https://api.z.ai/api/anthropic
-# Domestic (Zhipu/bigmodel): https://open.bigmodel.cn/api/anthropic
+GLM_PLATFORM=zai
+GLM_ZAI_API_KEY=your-zai-key
+GLM_ZHIPU_API_KEY=your-zhipu-key
 ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
-ANTHROPIC_AUTH_TOKEN=your-token
+ANTHROPIC_AUTH_TOKEN=
 ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.2[1m]
 ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.2[1m]
 ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.7
 API_TIMEOUT_MS=3000000
-CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000
+GLM_CONTEXT_TOKENS=1000000
+GLM_AUTO_COMPACT_PERCENT=90
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+Z_AI_MODE=ZAI
+Z_AI_VISION_MODEL=glm-5v-turbo
 ```
 
-Typical `api.env`:
+For GLM profiles, `ccs` derives `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`,
+`Z_AI_API_KEY`, `Z_AI_MODE`, and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` from
+`GLM_PLATFORM`, the matching `GLM_*_API_KEY`, `GLM_CONTEXT_TOKENS`, and
+`GLM_AUTO_COMPACT_PERCENT`. It also writes the matching MCP auth headers and
+platform endpoints into the GLM profile's own Claude config before starting
+Claude Code.
+
+Typical `anthropic.env`:
 
 ```dotenv
-CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/api
+CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/anthropic
 CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
 CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
 ANTHROPIC_API_KEY=your-api-key
-```
-
-Typical `max.env`:
-
-```dotenv
-CLAUDE_CONFIG_DIR=/Users/you/.config/ccs/claude/max
-CCS_SHARED_CLAUDE_DIR=/Users/you/.claude
-CCS_SHARED_PATHS=CLAUDE.md,settings.json,skills,plugins,rules
 ```
 
 Typical `mimo.env`:

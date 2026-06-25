@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::agent::Agent;
+use crate::provider::Provider;
 
 #[derive(Debug, Clone)]
 pub struct Paths {
@@ -40,13 +40,13 @@ impl Paths {
         self.ccs_home.join("profiles")
     }
 
-    pub fn profile_file(&self, agent: Agent) -> PathBuf {
+    pub fn profile_file(&self, provider: Provider) -> PathBuf {
         self.profiles_dir()
-            .join(format!("{}.env", agent.canonical()))
+            .join(format!("{}.env", provider.canonical()))
     }
 
-    pub fn claude_dir(&self, agent: Agent) -> PathBuf {
-        self.ccs_home.join("claude").join(agent.canonical())
+    pub fn claude_dir(&self, provider: Provider) -> PathBuf {
+        self.ccs_home.join("claude").join(provider.canonical())
     }
 
     pub fn hook_file(&self) -> PathBuf {

@@ -78,7 +78,30 @@ fn status_prints_current_default_and_profiles_without_secrets() {
         .arg("status")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Default agent: deepseek"))
+        .stdout(predicate::str::contains("Default provider: deepseek"))
         .stdout(predicate::str::contains("deepseek"))
+        .stdout(predicate::str::contains("secret").not());
+}
+
+#[test]
+fn status_reports_glm_mcp_state_without_secrets() {
+    let home = TestHome::new();
+    std::fs::create_dir_all(home.path().join(".config/ccs/profiles")).unwrap();
+    std::fs::write(
+        home.path().join(".config/ccs/profiles/glm.env"),
+        format!(
+            "CLAUDE_CONFIG_DIR={}\nANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic\nANTHROPIC_AUTH_TOKEN=secret\n",
+            home.path().join(".config/ccs/claude/glm").display()
+        ),
+    )
+    .unwrap();
+
+    ccs(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("GLM platform: zai"))
+        .stdout(predicate::str::contains("GLM auto compact window: 900000"))
+        .stdout(predicate::str::contains("GLM MCP: pending"))
         .stdout(predicate::str::contains("secret").not());
 }
