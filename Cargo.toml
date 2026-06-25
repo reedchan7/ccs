@@ -1,0 +1,19 @@
+[package]
+name = "ccs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/reedchan7/ccs"
+description = "Claude Code session switcher"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+dotenvy = "0.15"
+serde_json = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
