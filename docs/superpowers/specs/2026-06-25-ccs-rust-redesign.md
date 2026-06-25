@@ -144,7 +144,8 @@ ccs profiles remove <agent>
 
 Behavior:
 
-- `ccs profiles` and `ccs profiles ls` list configured profiles.
+- `ccs profiles`, `ccs profiles list`, and `ccs profiles ls` list configured
+  profiles.
 - `ccs profiles edit <agent>` opens the profile file in `$EDITOR`.
 - `ccs profiles add <agent>` creates a stub or guided profile.
 - `ccs profiles remove <agent>` removes only the profile `.env` file after an
@@ -364,16 +365,19 @@ The installed hook should be small and boring. For zsh/bash:
 ```bash
 ccs() {
   local command="${1:-}"
-  if [ "$command" = "use" ]; then
-    local output
-    output="$("$HOME/.local/bin/ccs" internal env "$@")" || {
-      printf '%s\n' "$output" >&2
-      return 1
-    }
-    eval "$output"
-  else
-    "$HOME/.local/bin/ccs" "$@"
-  fi
+  case " $* " in
+    *" --global "*) "$HOME/.local/bin/ccs" "$@" ;;
+    *) if [ "$command" = "use" ]; then
+         local output
+         output="$("$HOME/.local/bin/ccs" internal env "$@")" || {
+           printf '%s\n' "$output" >&2
+           return 1
+         }
+         eval "$output"
+       else
+         "$HOME/.local/bin/ccs" "$@"
+       fi ;;
+  esac
 }
 ```
 
@@ -480,4 +484,3 @@ The Rust rewrite should cover these behaviors:
 - Linux/macOS AMD64/ARM64 release assets are built from version tags.
 - `ccs update` installs the matching GitHub Release asset for the current
   platform.
-
