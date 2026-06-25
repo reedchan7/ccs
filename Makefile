@@ -1,22 +1,29 @@
-.PHONY: fmt lint test build install release-local
+.DEFAULT_GOAL := Help
 
-fmt:
+.PHONY: Help help fmt lint test build install release-local
+
+Help: ## Show available make targets
+	@awk 'BEGIN {FS = ":.*## "}; /^[[:alnum:]_-]+:.*## / {printf "make %-13s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+help: Help
+
+fmt: ## Format Rust code
 	cargo fmt --all
 
-lint:
+lint: ## Run clippy with warnings denied
 	cargo clippy --all-targets --all-features -- -D warnings
 
-test:
+test: ## Run tests
 	cargo test --all
 
-build:
+build: ## Build debug binary
 	cargo build --locked
 
-install:
+install: ## Install ccs locally
 	cargo build --release --locked
 	mkdir -p "$$HOME/.local/bin"
 	cp target/release/ccs "$$HOME/.local/bin/ccs"
 	"$$HOME/.local/bin/ccs" init --hooks-only
 
-release-local:
+release-local: ## Build release binary
 	cargo build --release --locked
