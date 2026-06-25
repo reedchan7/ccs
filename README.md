@@ -1,14 +1,13 @@
 # ccs
 
-`ccs` is a small Rust CLI for running Claude Code with isolated API provider
-profiles.
+`ccs` runs Claude Code with isolated provider profiles.
 
 It is useful when you want to keep your normal Claude Code subscription login
 untouched, while launching provider-backed sessions such as GLM, DeepSeek, Kimi,
-MiMo, or Anthropic API from one command.
+MiMo, Anthropic API, or other compatible providers from one command.
 
 Use the plain `claude` command for your local Claude subscription. Use `ccs`
-for API provider profiles.
+for provider profiles.
 
 ## Providers
 
