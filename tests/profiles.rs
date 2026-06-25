@@ -1,5 +1,6 @@
 use ccs::agent::Agent;
 use ccs::env::render_shell_exports;
+use ccs::links::ensure_shared_links;
 use ccs::paths::Paths;
 use ccs::profile::{read_default_profile, write_default_profile, Profile};
 use tempfile::TempDir;
@@ -48,4 +49,77 @@ fn shell_exports_clear_known_vars_and_hide_ccs_internal_keys() {
     assert!(exports.contains("export ANTHROPIC_API_KEY="));
     assert!(exports.contains("export CCS_ACTIVE_PROFILE="));
     assert!(!exports.contains("export CCS_SHARED_PATHS="));
+}
+
+#[test]
+fn creates_default_shared_symlinks() {
+    let home = TempDir::new().unwrap();
+    let shared = home.path().join(".claude");
+    std::fs::create_dir_all(shared.join("skills")).unwrap();
+    std::fs::write(shared.join("settings.json"), "{}\n").unwrap();
+    std::fs::write(shared.join("CLAUDE.md"), "base\n").unwrap();
+
+    let config_dir = home.path().join(".config/ccs/claude/max");
+    let paths = Paths::from_home(home.path());
+    std::fs::create_dir_all(paths.profiles_dir()).unwrap();
+    std::fs::write(
+        paths.profile_file(Agent::Max),
+        format!(
+            "CLAUDE_CONFIG_DIR={}\nCCS_SHARED_CLAUDE_DIR={}\nCCS_SHARED_PATHS=CLAUDE.md,settings.json,skills\n",
+            config_dir.display(),
+            shared.display()
+        ),
+    )
+    .unwrap();
+
+    let profile = Profile::load(&paths, Agent::Max).unwrap();
+    ensure_shared_links(&profile).unwrap();
+
+    assert_eq!(
+        std::fs::read_link(config_dir.join("CLAUDE.md")).unwrap(),
+        shared.join("CLAUDE.md")
+    );
+    assert_eq!(
+        std::fs::read_link(config_dir.join("settings.json")).unwrap(),
+        shared.join("settings.json")
+    );
+    assert_eq!(
+        std::fs::read_link(config_dir.join("skills")).unwrap(),
+        shared.join("skills")
+    );
+}
+
+#[test]
+fn backs_up_existing_local_shared_path_before_linking() {
+    let home = TempDir::new().unwrap();
+    let shared = home.path().join(".claude");
+    std::fs::create_dir_all(&shared).unwrap();
+    std::fs::write(shared.join("settings.json"), "shared\n").unwrap();
+    let config_dir = home.path().join(".config/ccs/claude/glm");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(config_dir.join("settings.json"), "local\n").unwrap();
+
+    let paths = Paths::from_home(home.path());
+    std::fs::create_dir_all(paths.profiles_dir()).unwrap();
+    std::fs::write(
+        paths.profile_file(Agent::Glm),
+        format!(
+            "CLAUDE_CONFIG_DIR={}\nCCS_SHARED_CLAUDE_DIR={}\nCCS_SHARED_PATHS=settings.json\nANTHROPIC_BASE_URL=https://example.test\nANTHROPIC_AUTH_TOKEN=token\n",
+            config_dir.display(),
+            shared.display()
+        ),
+    )
+    .unwrap();
+
+    let profile = Profile::load(&paths, Agent::Glm).unwrap();
+    ensure_shared_links(&profile).unwrap();
+
+    assert_eq!(
+        std::fs::read_link(config_dir.join("settings.json")).unwrap(),
+        shared.join("settings.json")
+    );
+    assert_eq!(
+        std::fs::read_to_string(config_dir.join(".ccs-local-backup/settings.json")).unwrap(),
+        "local\n"
+    );
 }
