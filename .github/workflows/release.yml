@@ -39,7 +39,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/ccs" "dist/${asset}/ccs"
           cp README.md "dist/${asset}/README.md"
           tar -C dist -czf "dist/${asset}.tar.gz" "${asset}"
-          shasum -a 256 "dist/${asset}.tar.gz" > "dist/${asset}.tar.gz.sha256"
+          (cd dist && shasum -a 256 "${asset}.tar.gz" > "${asset}.tar.gz.sha256")
       - uses: actions/upload-artifact@v4
         with:
           name: ccs-${{ matrix.target }}
