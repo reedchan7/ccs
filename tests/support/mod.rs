@@ -2,11 +2,13 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
+#[allow(dead_code)]
 pub struct TestHome {
     temp: TempDir,
     bin: PathBuf,
 }
 
+#[allow(dead_code)]
 impl TestHome {
     pub fn new() -> Self {
         let temp = TempDir::new().unwrap();

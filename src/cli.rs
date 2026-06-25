@@ -108,11 +108,20 @@ fn parse_permissions(args: &[OsString]) -> Result<Command> {
 
 fn parse_internal(args: &[OsString]) -> Result<Command> {
     match args.first().and_then(|value| value.to_str()) {
-        Some("env") => Ok(Command::InternalEnv {
-            agent: required_arg(args, "agent")?,
-        }),
+        Some("env") => {
+            if args.get(1).and_then(|value| value.to_str()) != Some("use") {
+                bail!("usage: ccs internal env use <agent>");
+            }
+            let agent = args
+                .get(2)
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| anyhow::anyhow!("missing agent"))?;
+            Ok(Command::InternalEnv {
+                agent: agent.to_owned(),
+            })
+        }
         Some(other) => bail!("unknown internal command: {other}"),
-        None => bail!("usage: ccs internal env <agent>"),
+        None => bail!("usage: ccs internal env use <agent>"),
     }
 }
 

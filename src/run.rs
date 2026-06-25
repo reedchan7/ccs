@@ -5,10 +5,11 @@ use anyhow::{bail, Result};
 
 use crate::agent::Agent;
 use crate::cli::{Command, ProfilesCommand};
-use crate::env::KNOWN_ENV_VARS;
+use crate::env::{render_shell_exports, KNOWN_ENV_VARS};
 use crate::links::ensure_shared_links;
 use crate::paths::Paths;
-use crate::profile::{read_default_profile, Profile};
+use crate::profile::{read_default_profile, write_default_profile, Profile};
+use crate::shell;
 
 pub fn execute(command: Command) -> Result<i32> {
     let paths = Paths::from_env()?;
@@ -28,6 +29,36 @@ pub fn execute(command: Command) -> Result<i32> {
                 if paths.profile_file(*agent).exists() {
                     println!("{}", agent.canonical());
                 }
+            }
+            Ok(0)
+        }
+        Command::Use { agent, global } => {
+            let agent = Agent::parse(&agent)?;
+            if global {
+                write_default_profile(&paths, agent)?;
+                println!("Default agent: {}", agent.canonical());
+            } else {
+                println!("Run this once, or run `ccs init` to install the shell hook:");
+                println!(
+                    "eval \"$({} internal env use {})\"",
+                    current_binary(),
+                    agent.canonical()
+                );
+            }
+            Ok(0)
+        }
+        Command::InternalEnv { agent } => {
+            let agent = Agent::parse(&agent)?;
+            let profile = Profile::load(&paths, agent)?;
+            ensure_shared_links(&profile)?;
+            print!("{}", render_shell_exports(&profile, agent));
+            Ok(0)
+        }
+        Command::Init { hooks_only } => {
+            shell::install_hooks(&paths, &current_binary())?;
+            println!("Shell hook installed");
+            if !hooks_only {
+                println!("Next: ccs profiles add ds");
             }
             Ok(0)
         }
@@ -73,4 +104,11 @@ fn print_help() {
     println!("  ccs init");
     println!("  ccs status");
     println!("  ccs update");
+}
+
+fn current_binary() -> String {
+    std::env::current_exe()
+        .ok()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "ccs".into())
 }
