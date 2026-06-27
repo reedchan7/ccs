@@ -8,7 +8,7 @@ use anyhow::{Result, bail};
 use crate::cli::{Command, ProfilesCommand};
 use crate::env::{KNOWN_ENV_VARS, derived_provider_env, render_shell_exports, skip_profile_env};
 use crate::glm::{GlmPlatform, resolve_glm};
-use crate::links::ensure_shared_links;
+use crate::links::{ensure_multimodal_skill, ensure_shared_links};
 use crate::mcp::{ensure_provider_mcp, glm_mcp_configured, glm_mcp_file};
 use crate::paths::Paths;
 use crate::profile::{
@@ -93,6 +93,9 @@ pub fn execute(command: Command) -> Result<i32> {
             ensure_platform_allowed(provider, platform)?;
             let profile = Profile::load(&paths, provider)?;
             ensure_shared_links(&profile)?;
+            if provider == Provider::Deepseek {
+                ensure_multimodal_skill(&paths, Some(&profile))?;
+            }
             ensure_provider_mcp(&profile, provider, platform)?;
             print!("{}", render_shell_exports(&profile, provider, platform)?);
             Ok(0)
@@ -118,6 +121,9 @@ pub fn execute(command: Command) -> Result<i32> {
                 } else {
                     write_template(&paths, provider)?
                 };
+                if provider == Provider::Deepseek {
+                    ensure_multimodal_skill(&paths, None)?;
+                }
                 write_default_profile(&paths, provider)?;
                 if provider == Provider::Glm && reconfigure {
                     println!("GLM profile refreshed from environment");
@@ -142,6 +148,9 @@ pub fn execute(command: Command) -> Result<i32> {
                 match loaded {
                     Ok(profile) => {
                         ensure_shared_links(&profile)?;
+                        if provider == Provider::Deepseek {
+                            ensure_multimodal_skill(&paths, Some(&profile))?;
+                        }
                         if let Some(file) = ensure_provider_mcp(&profile, provider, platform)? {
                             let glm = resolve_glm(&profile, platform)?;
                             runtime_ready = true;
@@ -205,6 +214,9 @@ pub fn launch_provider(
     ensure_platform_allowed(provider, platform)?;
     let profile = Profile::load(paths, provider)?;
     ensure_shared_links(&profile)?;
+    if provider == Provider::Deepseek {
+        ensure_multimodal_skill(paths, Some(&profile))?;
+    }
     ensure_provider_mcp(&profile, provider, platform)?;
 
     let mut command = ProcessCommand::new("claude");

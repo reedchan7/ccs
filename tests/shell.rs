@@ -27,8 +27,9 @@ fn write_deepseek(home: &TestHome) {
     std::fs::write(
         home.path().join(".config/ccs/profiles/deepseek.env"),
         format!(
-            "CLAUDE_CONFIG_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
-            home.path().join(".config/ccs/claude/deepseek").display()
+            "CLAUDE_CONFIG_DIR={}\nCCS_SHARED_CLAUDE_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
+            home.path().join(".config/ccs/claude/deepseek").display(),
+            home.path().join(".claude").display()
         ),
     )
     .unwrap();
@@ -44,6 +45,13 @@ fn write_glm(home: &TestHome) {
         ),
     )
     .unwrap();
+}
+
+fn write_multimodal_skill(home: &TestHome) -> std::path::PathBuf {
+    let skill = home.path().join("Workspaces/agent/skills/inspect-media");
+    std::fs::create_dir_all(skill.join("scripts")).unwrap();
+    std::fs::write(skill.join("SKILL.md"), "---\nname: inspect-media\n---\n").unwrap();
+    skill
 }
 
 #[test]
@@ -121,6 +129,23 @@ fn init_prepares_deepseek_as_default() {
     );
     let config = std::fs::read_to_string(home.path().join(".config/ccs/config")).unwrap();
     assert_eq!(config, "default_profile=deepseek\n");
+}
+
+#[test]
+fn setup_deepseek_links_multimodal_skill() {
+    let home = TestHome::new();
+    let skill = write_multimodal_skill(&home);
+
+    ccs(&home).args(["setup", "ds"]).assert().success();
+
+    assert_eq!(
+        std::fs::read_link(
+            home.path()
+                .join(".config/ccs/claude/deepseek/skills/inspect-media")
+        )
+        .unwrap(),
+        skill
+    );
 }
 
 #[test]

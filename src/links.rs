@@ -3,9 +3,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use crate::paths::Paths;
 use crate::profile::Profile;
+use crate::provider::Provider;
 
 const DEFAULT_SHARED_PATHS: &str = "CLAUDE.md,settings.json,skills,plugins,rules";
+const MULTIMODAL_SKILL: &str = "inspect-media";
 
 pub fn ensure_shared_links(profile: &Profile) -> Result<()> {
     let Some(config_dir) = profile.value("CLAUDE_CONFIG_DIR") else {
@@ -53,6 +56,31 @@ pub fn ensure_shared_links(profile: &Profile) -> Result<()> {
             .with_context(|| format!("link {} -> {}", target.display(), source.display()))?;
     }
 
+    Ok(())
+}
+
+pub fn ensure_multimodal_skill(paths: &Paths, profile: Option<&Profile>) -> Result<()> {
+    let source = paths
+        .home()
+        .join("Workspaces/agent/skills")
+        .join(MULTIMODAL_SKILL);
+    if !source.join("SKILL.md").is_file() {
+        return Ok(());
+    }
+
+    let config_dir = profile
+        .and_then(|profile| profile.value("CLAUDE_CONFIG_DIR").map(PathBuf::from))
+        .unwrap_or_else(|| paths.claude_dir(Provider::Deepseek));
+    let skills_dir = config_dir.join("skills");
+    fs::create_dir_all(&skills_dir)?;
+
+    let target = skills_dir.join(MULTIMODAL_SKILL);
+    if is_symlink_to(&target, &source)? || target.exists() || target.is_symlink() {
+        return Ok(());
+    }
+
+    std::os::unix::fs::symlink(&source, &target)
+        .with_context(|| format!("link {} -> {}", target.display(), source.display()))?;
     Ok(())
 }
 

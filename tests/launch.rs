@@ -18,6 +18,13 @@ fn ccs(home: &TestHome) -> Command {
     cmd
 }
 
+fn write_multimodal_skill(home: &TestHome) -> std::path::PathBuf {
+    let skill = home.path().join("Workspaces/agent/skills/inspect-media");
+    std::fs::create_dir_all(skill.join("scripts")).unwrap();
+    std::fs::write(skill.join("SKILL.md"), "---\nname: inspect-media\n---\n").unwrap();
+    skill
+}
+
 #[test]
 fn bare_ccs_without_default_prints_next_step() {
     let home = TestHome::new();
@@ -35,8 +42,9 @@ fn bare_ccs_runs_default_provider() {
     std::fs::write(
         home.path().join(".config/ccs/profiles/deepseek.env"),
         format!(
-            "CLAUDE_CONFIG_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
-            home.path().join(".config/ccs/claude/deepseek").display()
+            "CLAUDE_CONFIG_DIR={}\nCCS_SHARED_CLAUDE_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
+            home.path().join(".config/ccs/claude/deepseek").display(),
+            home.path().join(".claude").display()
         ),
     )
     .unwrap();
@@ -57,12 +65,14 @@ fn bare_ccs_runs_default_provider() {
 fn ccs_ds_runs_deepseek_and_passes_args() {
     let home = TestHome::new();
     home.write_fake_claude();
+    let skill = write_multimodal_skill(&home);
     std::fs::create_dir_all(home.path().join(".config/ccs/profiles")).unwrap();
     std::fs::write(
         home.path().join(".config/ccs/profiles/deepseek.env"),
         format!(
-            "CLAUDE_CONFIG_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
-            home.path().join(".config/ccs/claude/deepseek").display()
+            "CLAUDE_CONFIG_DIR={}\nCCS_SHARED_CLAUDE_DIR={}\nANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nANTHROPIC_AUTH_TOKEN=token\n",
+            home.path().join(".config/ccs/claude/deepseek").display(),
+            home.path().join(".claude").display()
         ),
     )
     .unwrap();
@@ -73,6 +83,15 @@ fn ccs_ds_runs_deepseek_and_passes_args() {
         .success()
         .stdout(predicate::str::contains("CCS_ACTIVE_PROFILE=deepseek"))
         .stdout(predicate::str::contains("ARGS=--print hello "));
+
+    assert_eq!(
+        std::fs::read_link(
+            home.path()
+                .join(".config/ccs/claude/deepseek/skills/inspect-media")
+        )
+        .unwrap(),
+        skill
+    );
 }
 
 #[test]

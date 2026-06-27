@@ -15,7 +15,7 @@ for provider profiles.
 | --- | --- | --- |
 | Anthropic API | `ccs anthropic` | Uses `ANTHROPIC_API_KEY` |
 | GLM / Z.AI | `ccs glm` | Includes official GLM MCP setup |
-| DeepSeek | `ccs ds` or `ccs deepseek` | `ds` is a built-in alias |
+| DeepSeek | `ccs ds` or `ccs deepseek` | `ds` is a built-in alias; links `~/Workspaces/agent/skills/inspect-media` when present |
 | Kimi | `ccs kimi` | Uses Kimi's coding endpoint |
 | MiMo | `ccs mimo` | Uses Xiaomi MiMo's Anthropic-compatible endpoint |
 
